@@ -1,0 +1,10 @@
+left_entry_prefix,right_entry_prefix,source_position,target_position,link_type,list_mode,dflt_ref_position
+wrk,wrk,L,R,citation,,L
+wrk,org,L0,R0,affiliation,1:1,L
+wrk,fun,R0,L,funder,,L
+wrk,fun,R0,L0,funder,m:m,L
+wrk,fun,R1,L,funder,,L
+wrk,fun,R1,L0,funder,m:m,L
+wrk,ack,L,R0,acknowledgement,m:m,L
+wrk,qte,L,R0,contained,,L
+wrk,not,L,R0,annotated,,

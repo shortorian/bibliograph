@@ -1,0 +1,19 @@
+This is stuff shorthand ignores when you use skiprows=1
+This should be skipped if skiprows=2
+left_entry, right_entry, link_tags_or_override, reference
+asmith_bwu__1999__bams__101__803__xxx,
+    , asmith_bwu__1998__bams__100__42__yyy  # this is an inline comment
+    , bjones__1975__jats__90__1__ bjones1975_is_tagged with some_stuff
+    , bwu__1989__t_long|title__x__80
+    , Some Author__1989__t_Title With \#__x__x
+    , fun__nasa__NASA|grant|12345-6789
+    , ack__margaret|lemone_some|other|person
+    , org__nasa_university|of|chicago
+    , "qte__super great quote, right?"__, p42
+    , qte__This is the abstract of the article. We did stuff and also found things., abstract p17
+    , not__this is an article I made up for testing__ some note tags
+    , not__here's a note with an escaped\__item separator and some "quotation marks"
+    , __weirdoPrefix__some_string_representation, new_relation, an|author__2199__some|other|source__x__x
+asmith_bwu__2008__bams__110__1__zzz,
+    , asmith_bwu__1999__bams__101__803__xxx
+    , ack__margaret|lemone_some|other|person

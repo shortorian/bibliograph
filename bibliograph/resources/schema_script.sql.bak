@@ -1,0 +1,168 @@
+CREATE TABLE sources(
+    source_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    source VARCHAR(255) NOT NULL, --pdDtype: object
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME, --pdDtype: object
+    FOREIGN KEY (comment_id) REFERENCES comments(comment_id)
+);
+
+CREATE TABLE assertions(
+    assertion_id INT PRIMARY KEY, --pdDtype: Int32
+    source_id INT NOT NULL REFERENCES sources(source_id), --pdDtype: Int32
+    src_string_id INT NOT NULL REFERENCES strings(string_id), --pdDtype: Int32
+    tgt_string_id INT NOT NULL REFERENCES strings(string_id), --pdDtype: Int32
+    edge_type_id INT NOT NULL REFERENCES edge_types(edge_type_id), --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME --pdDtype: object
+);
+
+CREATE TABLE strings(
+    string_id INT PRIMARY KEY, --pdDtype: Int32
+    node_id INT NOT NULL REFERENCES nodes(node_id), --pdDtype: Int32
+    string TEXT NOT NULL, --pdDtype: object
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME --pdDtype: object
+);
+
+CREATE TABLE nodes(
+    node_id INT PRIMARY KEY, --pdDtype: Int32
+    node_type_id INT NOT NULL REFERENCES node_types(node_type_id), --pdDtype: Int32
+    name_string_id INT REFERENCES strings(string_id), --pdDtype: Int32
+    abbr_string_id INT REFERENCES strings(string_id), --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME, --pdDtype: object
+    CONSTRAINT node_alt_pk UNIQUE (node_id, node_type_id)
+);
+
+CREATE TABLE node_types(
+    node_type_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    node_type VARCHAR(50) --pdDtype: object
+);
+
+CREATE TABLE comments(
+    comment_id INT PRIMARY KEY, --pdDtype: Int32
+    comment TEXT, --pdDtype: object
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME --pdDtype: object
+);
+
+CREATE TABLE documents(
+    node_id INT PRIMARY KEY, --pdDtype: Int32
+    node_type_id INT GENERATED ALWAYS AS (0) STORED, --pdDtype: Int32
+    document_type_id INT NOT NULL REFERENCES document_types(document_type_id), --pdDtype: Int32
+    pub_year VARCHAR(25), --pdDtype: object
+    volume VARCHAR(50), --pdDtype: object
+    nmbr VARCHAR(10), --pdDtype: object
+    pg VARCHAR(10), --pdDtype: object
+    endpg VARCHAR(10), --pdDtype: object
+    series VARCHAR(10), --pdDtype: object
+    doi VARCHAR(200), --pdDtype: object
+    ads_bibcode CHAR(19), --pdDtype: object
+    depth TINYINT, --pdDtype: Int8
+    FOREIGN KEY (node_id, node_type_id) REFERENCES nodes(node_id, node_type_id)
+);
+
+INSERT INTO comments(comment_id, comment)
+    VALUES(
+        0,
+        "a document is any kind of object that contains text represented in the database"
+    );
+
+INSERT INTO node_types(node_type_id, comment_id, node_type)
+VALUES(
+    0,
+    0,
+    "document"
+);
+
+CREATE TABLE agents(
+    node_id INT PRIMARY KEY, --pdDtype: Int32
+    node_type_id INT GENERATED ALWAYS AS (1) STORED, --pdDtype: Int32
+    agent_type_id INT NOT NULL REFERENCES agent_types(agent_type_id), --pdDtype: Int32
+    viafid VARCHAR(12), --pdDtype: object
+    FOREIGN KEY (node_id, node_type_id) REFERENCES nodes(node_id, node_type_id)
+);
+
+INSERT INTO comments(comment_id, comment)
+    VALUES(
+        1,
+        "an agent is any actor that could be responsible for an object represented in the database, for instance a person who wrote an article or an organization a person is affiliated with"
+    );
+
+INSERT INTO node_types(node_type_id, comment_id, node_type)
+    VALUES(
+        1,
+        1,
+        "agent"
+    );
+
+
+CREATE TABLE periodicals(
+    node_id INT PRIMARY KEY, --pdDtype: Int32
+    node_type_id INT GENERATED ALWAYS AS (2) STORED, --pdDtype: Int32
+    periodical_type_id INT NOT NULL REFERENCES periodical_types(periodical_type_id), --pdDtype: Int32
+    FOREIGN KEY (node_id, node_type_id) REFERENCES nodes(node_id, node_type_id)
+);
+
+INSERT INTO comments(comment_id, comment)
+    VALUES(
+        2,
+        "a periodical is any publication released at regular intervals"
+    );
+
+INSERT INTO node_types(node_type_id, comment_id, node_type)
+VALUES(
+    2,
+    2,
+    "periodical"
+);
+
+CREATE TABLE edges(
+    edge_id INT PRIMARY KEY, --pdDtype: Int32
+    src_node_id INT NOT NULL REFERENCES nodes(node_id), --pdDtype: Int32
+    tgt_node_id INT NOT NULL REFERENCES nodes(node_id), --pdDtype: Int32
+    edge_type_id INT NOT NULL REFERENCES edge_types(edge_type_id), --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    date_inserted DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, --pdDtype: object
+    date_modified DATETIME --pdDtype: object
+);
+
+CREATE TABLE edge_types(
+    edge_type_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    edge_type VARCHAR(50) NOT NULL, --pdDtype: object
+    is_directed BOOLEAN NOT NULL --pdDtype: bool
+);
+
+CREATE TABLE node_tags(
+    node_id INT NOT NULL REFERENCES nodes(node_id), --pdDtype: Int32
+    tag_id INT NOT NULL REFERENCES tags(tag_id) --pdDtype: Int32
+);
+
+CREATE TABLE tags(
+    tag_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    tag VARCHAR(50) NOT NULL --pdDtype: object
+);
+
+CREATE TABLE document_types(
+    document_type_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    document_type VARCHAR(50) NOT NULL --pdDtype: object
+);
+
+CREATE TABLE agent_types(
+    agent_type_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    agent_type VARCHAR(50) NOT NULL --pdDtype: object
+);
+
+CREATE TABLE periodical_types(
+    periodical_type_id INT PRIMARY KEY, --pdDtype: Int32
+    comment_id INT REFERENCES comments(comment_id), --pdDtype: Int32
+    periodical_type VARCHAR(50) NOT NULL --pdDtype: object
+);
