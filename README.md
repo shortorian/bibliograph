@@ -29,7 +29,7 @@ Critically, with a large data set, the set of assertions about strings that map 
 
 The purpose of my approach is to retain ambiguities databases are generally designed to eliminate. Historians and other people who work with texts are interested in what a source says and how it says it even if it turns out to be false or inconsistent with other statements, so much of the information they care about is discarded if equivalent statements are always reduced to a standard form in a database.
 
-This implies some ontological claim about text data:
+This implies some ontological claims about text data:
 1. Any map between signs like text and things in the world is fluid and ambiguous; the name "Akasofu" is not the same thing as the person called Akasofu.
 2. When people use signs, they create things in the world that exist separately and have potentially unique histories even if the signs are semantically identical; the sequence of letters "Akasofu" may appear in two different sources, but the sources are not the same object and so the two instances of "Akasofu" are distinguishable even when they mean the same thing.
 
