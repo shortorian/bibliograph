@@ -35,4 +35,4 @@ This implies some ontological claims about text data:
 
 `bibliograph` implements these claims by separating assertions made in text from things that stand in for what the text represents (the nodes). This ontology allows a user to act on corresponding epistemological propositions about text data:
 1. The map between assertions in texts and abstract things the assertions refer to should change over time as new information demands changes to previously valid interpretations. `bibliograph` is structured such that these revisions can be made without losing information about sources.
-2. We can make new knowledge by analyzing what has been said separately from what was meant or what is true. Bibliograph promotes this sort of analysis by allowing a user to query a normalized set of nodes and links and then retrieve ambiguous statements made about those abstract entities.
+2. We can make new knowledge by analyzing what has been said separately from what was meant or what is true. `bibliograph` promotes this sort of analysis by allowing a user to query a normalized set of nodes and links and then retrieve ambiguous statements made about those abstract entities.
