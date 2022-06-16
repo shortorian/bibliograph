@@ -5,7 +5,7 @@ A database system for humanities research projects.
 
 `bibliograph` provides methods to store relations between entities as they are represented in source material ("assertions" users transcribe or annotate from documents) alongside abstract relations interpreted from the sources (edges between nodes created by a user). Researchers can therefore retain contents of sources verbatim while generating a normalized relational database that's easily queried. This is a solution to the "problem" of normalization: a historian might like to compare sources that mention Ada Lovelace as "Ada Lovelace" to those that use the name "Augusta Byron", but a normalized relational database typically requires awkward linking between entities with different names. `bibliograph` is designed to avoid normalized references to abstract entities and allow users to find relationships between sources that refer to the same things in inconsistent or contradictory ways.
 
-The code is in early development, with an alpha release and documentation expected in summer 2022.
+An alpha release and documentation are expected in summer 2022.
 
 ## The Data Model
 
