@@ -51,7 +51,7 @@ Two things to note about the description above:
 
 ### A philosophy of data
 
-The `bibliograph` project and the companion `shorthand` data entry system are part of an argument that good research should be grounded in good philosophy. There is a strong philosophical argument for the approach taken here, and I hope to articulate it more clearly over time as I complete the code and use it in my research.
+The `bibliograph` project and the companion [`shorthand`](https://github.com/shortorian/shorthand) data entry system are part of an argument that good research should be grounded in good philosophy. There is a strong philosophical argument for the approach taken here, and I hope to articulate it more clearly over time as I complete the code and use it in my research.
 
 The bibliograph schema is built on two ontological claims about sources:
 1. Any map between signs like text and things in the world is fluid and ambiguous: the name "Simpson" is not the same thing as the person called Simpson.
