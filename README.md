@@ -11,7 +11,7 @@ I plan to make an alpha release with documentation in summer 2022.
 
 ### Overview: picking your mess
 
-"Data cleaning" typically destroys information: data is restructured such that references are uniform, duplicates are eliminated, and the database contains a "correct" representation of input data. In that process, a database is irreversibly separated from whatever sources generated the input data. The standard assumption is that inconsistencies in data are either entry errors or useless variations on a standard value. However, those variations between statements about the same things are exactly the kind of data historians and other researchers in the humanities would like to study. `bibliograph` retains the variations alongside normalized, queryable tables so users can access both the "clean" relationships they interpret from source material and the "messy" relationships in their sources.
+"Data cleaning" typically destroys information: data are restructured such that references are uniform, duplicates are eliminated, and the database contains a "correct" representation of input data. In that process, a database is irreversibly separated from whatever sources generated the input data. The standard assumption is that inconsistencies in data are either entry errors or useless variations on a standard value. However, those variations between statements about the same things are exactly the kind of data historians and other researchers in the humanities would like to study. `bibliograph` retains the variations alongside normalized, queryable tables so users can access both the "clean" relationships they interpret from source material and the "messy" relationships in their sources.
 
 As a simple example, consider a data set with assertions that "Miss Gerould", "Malkus, J.", "Joanne Simpson", "Gerould, Joanne", "Mrs. Malkus", and "simpsonj" represent contributors to scientific papers. These are all names of the same meteorologist. In the `bibliograph` schema, these string values are stored in one table and another table contains links between them and strings representing the papers. A third table has a single row representing one person and all the string values reference that row, which I call a node. A fourth table then stores links between nodes, so the node for Simpson could be linked to nodes representing articles she wrote. 
 
@@ -28,7 +28,7 @@ Critically, with a large data set, the set of assertions about strings that map 
 
 Most implications of the data model are contained in the sentence
 
-    Input data consists of assertions about strings, which correspond to edges between nodes
+    Input data consist of assertions about strings, which correspond to edges between nodes
 
 As show in the diagram below, the database is built around four tables: **assertions**, **strings**, **nodes**, and **edges**.
 
@@ -45,7 +45,7 @@ Click [here](https://raw.githubusercontent.com/shortorian/bibliograph/main/2022_
 
 Two things to note about the description above:
 1. None of the example associations are hard-coded. A user can have "author" as a node type rather than a link type, the node types could be "actor" and "work", "A is author of B" could be stored twice in the **strings** table with each instance mapped to a different node, etc. The only constraint is that strings are mapped to nodes one-to-many: every row in the **strings** table points to only one node but any number of strings can refer to the same row in the **nodes** table.
-2. No database can prevent bad input (all the statements about sources here assume a user has created input data that accurately describe their sources), but `bibliograph` allows a user to search for and resolve errors in ways they couldn't if data was cleaned before entry: when an error is suspected, users can compare the abstract relationships they think are correct with "raw" input values and more easily distinguish between user error and ambiguous sources. Rows in the **assertions** and **edges** tables contain optional metadata that allows users to quickly determine how to compare their input data to external sources. See the (forthcoming) documentation for details.
+2. No database can prevent bad input (all the statements about sources here assume a user has created input data that accurately describe their sources), but `bibliograph` allows a user to search for and resolve errors in ways they couldn't if data were cleaned before entry: when an error is suspected, users can compare the abstract relationships they think are correct with "raw" input values and more easily distinguish between user error and ambiguous sources. Rows in the **assertions** and **edges** tables contain optional metadata that allows users to quickly determine how to compare their input data to external sources. See the (forthcoming) documentation for details.
 
 ### A philosophy of data
 
