@@ -9,7 +9,7 @@ A database system for humanities research projects.
 
 I plan to make an alpha release with documentation in summer 2022.
 
-## Overview: picking your mess
+### Overview: picking your mess
 
 "Data cleaning" typically destroys information: data is restructured such that references are uniform, duplicates are eliminated, and the database contains a "correct" representation of input data. In that process, a database is irreversibly separated from whatever sources generated the input data. The standard assumption is that inconsistencies in data are either entry errors or useless variations on a standard value. However, those variations between statements about the same things are exactly the kind of data historians and other researchers in the humanities would like to study. `bibliograph` retains the variations alongside normalized, queryable tables so users can access both the "clean" relationships they interpret from source material and the "messy" relationships in their sources.
 
@@ -24,7 +24,7 @@ Critically, with a large data set, the set of assertions about strings that map 
 
 `bibliograph` asks a user to pick out a mess they can use to solve research problems.
 
-## The data model
+### The data model
 
 Most implications of the data model are contained in the sentence
 
@@ -47,7 +47,7 @@ Two things to note about the description above:
 1. None of the example associations are hard-coded. A user can have "author" as a node type rather than a link type, the node types could be "actor" and "work", "A is author of B" could be stored twice in the **strings** table with each instance mapped to a different node, etc. The only constraint is that strings are mapped to nodes one-to-many: every row in the **strings** table points to only one node but any number of strings can refer to the same row in the **nodes** table.
 2. No database can prevent bad input (all the statements about sources here assume a user has created input data that accurately describe their sources), but `bibliograph` allows a user to search for and resolve errors in ways they couldn't if data was cleaned before entry: when an error is suspected, users can compare the abstract relationships they think are correct with "raw" input values and more easily distinguish between user error and ambiguous sources. Rows in the **assertions** and **edges** tables contain optional metadata that allows users to quickly determine how to compare their input data to external sources. See the (forthcoming) documentation for details.
 
-## A philosophy of data
+### A philosophy of data
 
 The `bibliograph` project and the companion `shorthand` data entry system are part of an argument that good research should be grounded in good philosophy. There is a strong philosophical argument for the approach taken here, and I hope to articulate it more clearly over time as I complete the code and use it in my research.
 
