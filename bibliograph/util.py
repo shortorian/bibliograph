@@ -1,6 +1,4 @@
-from collections.abc import Iterable
 from datetime import datetime
-
 import bibliograph as bg
 import pandas as pd
 
@@ -25,13 +23,16 @@ def coerce_types(coerce,
     if isinstance(coerce, pd.Series):
         if template is None:
             if series_dtype is None:
-                raise ValueError('Must provide template object or list-like '
-                                 'of dtypes')
+                raise ValueError(
+                    'Must provide template object or list-like of dtypes'
+                )
             dtype = series_dtype
 
         elif not isinstance(template, pd.Series):
-            raise TypeError('if object to coerce has type pd.Series '
-                            'then template must have type pd.Series')
+            raise TypeError(
+                'if object to coerce has type pd.Series then template '
+                'must have type pd.Series'
+            )
         else:
             dtype = template.dtypes
 
@@ -48,18 +49,22 @@ def coerce_types(coerce,
     else:
 
         if not all([col in template.columns for col in coerce.columns]):
-            missing_cols = [col for col in coerce.columns
-                            if col not in template.columns]
-            raise ValueError('Every column in dataframe to coerce must '
-                             'exist in template dataframe. Column '
-                             'label(s) {} do not exist in the template.'
-                             .format(missing_cols))
+            missing_cols = [
+                col for col in coerce.columns if col not in template.columns
+            ]
+            raise ValueError(
+                'Every column in dataframe to coerce must exist in '
+                'template dataframe. Column label(s) {} do not exist '
+                'in the template.'.format(missing_cols)
+            )
 
-        common_cols = [col for col in coerce.columns
-                       if col in template.columns]
+        common_cols = [
+            col for col in coerce.columns if col in template.columns
+        ]
 
-        if insert_columns and not all([col in coerce.columns
-                                       for col in template.columns]):
+        if insert_columns and not all(
+            [col in coerce.columns for col in template.columns]
+        ):
 
             for i in range(len(template.columns)):
                 label = template.columns[i]
@@ -98,16 +103,18 @@ def coerce_types(coerce,
                 coerce.loc[:, labels] = coerce[labels].apply(mapper)
 
         try:
-            coerce = coerce.astype(dict(zip(coerce.columns,
-                                            template[c].dtypes.array)))
+            coerce = coerce.astype(
+                dict(zip(coerce.columns, template[c].dtypes.array))
+            )
         except TypeError:
             whereNaN = coerce.isna()
             coerce = coerce.fillna(0)
 
             lower_case_types = template[c].dtypes.astype(str).str.lower().array
             coerce = coerce.astype(dict(zip(coerce.columns, lower_case_types)))
-            coerce = coerce.astype(dict(zip(coerce.columns,
-                                            template[c].dtypes.array)))
+            coerce = coerce.astype(
+                dict(zip(coerce.columns, template[c].dtypes.array))
+            )
 
             coerce = coerce.mask(whereNaN, pd.NA)
 
@@ -135,21 +142,21 @@ def iterable_not_string(x):
 
 def missing_integers(input_values, rng=None):
     '''
-    Creates a set of integers in a target range that does 
+    Creates a set of integers in a target range that does
     not intersect with values in an input set. Default range
     fills gaps from 0 to the largest input value.
-    
+
     If target range does not intersect with input, return
-    target. 
+    target.
 
     If target range exactly covers or is a subset of input,
     return empty set.
-    
+
     input
     -----
     input_values (list-like or set):
         integers to exclude from output
-    
+
     output
     ------
     (set):
@@ -157,14 +164,14 @@ def missing_integers(input_values, rng=None):
     '''
     if len(rng) != 2:
         raise ValueError('rng must be list-like with two elements')
-    
+
     input_values = set(input_values)
-    
+
     if rng is None:
         rng = [0, int(max(input_values)) + 1]
 
     target_range = set(range(*rng))
-    
+
     if target_range.intersection(input_values) == set():
         return target_range
     if target_range.union(input_values) == input_values:
@@ -224,7 +231,7 @@ def non_intersecting_sequence(
     non_intersecting_sequence(c, d, ignore_duplicates=True)
     # output: Series([1,3,5])
     '''
-  
+
     if type(existing) == set:
         existing = list(existing)
 
@@ -248,7 +255,7 @@ def non_intersecting_sequence(
     # NOTE
     # I initially had a default value rng=[0, None] in the function signature.
     # In prototyping with Jupyter lab, multiple calls to this function in a row
-    # would retain the previous value of rng (the second element would not be 
+    # would retain the previous value of rng (the second element would not be
     # None in the second call). I don't know why this happened and I don't know
     # why using rng=None as a default in the signature fixed the problem.
 
@@ -260,8 +267,10 @@ def non_intersecting_sequence(
     elif len(rng) != 2:
         raise ValueError('rng must be list-like with two elements')
     elif len(range(*rng)) < (len(unique_ints_to_map) + 1):
-        raise ValueError('range(*rng) must include at least as many '
-                         'values as number of values to map')
+        raise ValueError(
+            'range(*rng) must include at least as many values as '
+            'number of values to map'
+        )
 
     available_ints = missing_integers(existing.drop_duplicates(), rng)
     available_ints = pd.Series(list(available_ints), dtype='int')
@@ -286,18 +295,21 @@ def non_intersecting_sequence(
 
 def read_label_map(filename):
     label_map = pd.read_csv(filename, header=0, skipinitialspace=True)
-    
+
     default_columns = bg._default_label_map.columns
 
-    all_columns_in_default = all([c in default_columns 
-                                  for c in label_map.columns])
-    all_defaults_in_columns = all([c in label_map.columns
-                                   for c in default_columns])
+    all_columns_in_default = all(
+        [c in default_columns for c in label_map.columns]
+    )
+    all_defaults_in_columns = all(
+        [c in label_map.columns for c in default_columns]
+    )
 
     if (not all_columns_in_default) or (not all_defaults_in_columns):
-        raise ValueError('label map must have columns {}'
-                         .format(default_columns))
-    
+        raise ValueError(
+            'label map must have columns {}'.format(default_columns)
+        )
+
     return label_map
 
 
@@ -310,16 +322,18 @@ def extract_surname_and_initials(name):
     "SURNAME, ALPHA-BETA" maps to surnameab.
     '''
     name = name.split(', ')
-    
+
     if ' ' in name[0]:
         name[0] = ''.join(name[0].split(' '))
-    
+
     if len(name) == 1:
         return name[0]
 
     if ''.join(c for c in name[1] if c.isalpha()).isupper():
-        name[1] = [s[0] for substring in name[1].strip().split(' ') 
-                        for s in substring.strip('-').split('-')]
+        name[1] = [
+            s[0] for substring in name[1].strip().split(' ')
+            for s in substring.strip('-').split('-')
+        ]
         return (name[0] + ''.join(name[1])).lower()
 
     else:
@@ -330,15 +344,19 @@ def time_string():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
 
-def extract_comments(df,
-                     extract_from_schema=None,
-                     template_tn=None,
-                     coerce=True,
-                     insert_columns=False):
+def extract_comments(
+    df,
+    extract_from_schema=None,
+    template_tn=None,
+    coerce=True,
+    insert_columns=False
+):
 
     if extract_from_schema.lower() == 'comments':
-        raise ValueError('extract_from_schema="comments" is not valid input. '
-                         'Cannot extract comments from comments table.')
+        raise ValueError(
+            'extract_from_schema="comments" is not valid input. '
+            'Cannot extract comments from comments table.'
+        )
 
     df = df.copy()
     df['comment_id'] = df.index.array
@@ -350,7 +368,7 @@ def extract_comments(df,
 
     if extract_from_schema is None:
         df_cols = [c for c in df.columns if c != 'comment']
-    
+
     else:
         if template_tn is None:
             schema = bg._default_schema
@@ -360,29 +378,43 @@ def extract_comments(df,
             error_name = 'template_tn.schema'
 
         if extract_from_schema not in schema.keys():
-            raise ValueError('Table name {} not in {}'.format(extract_from_schema,
-                                                              error_name))
-        
-        df_cols = [c for c in df.columns if c in schema[extract_from_schema].columns]
-    
+            raise ValueError(
+                'Table name {} not in {}'
+                .format(extract_from_schema, error_name)
+            )
+
+        df_cols = [
+            c for c in df.columns if c in schema[extract_from_schema].columns
+        ]
+
     comments = df.loc[~no_comment, ['comment_id', 'comment']]
     df = df.loc[:, df_cols]
 
     if coerce:
-        df = coerce_types(df, schema[extract_from_schema], insert_columns=insert_columns)
-        comments = coerce_types(comments, schema['comments'], insert_columns=insert_columns)
-    
+        df = coerce_types(
+            df,
+            schema[extract_from_schema],
+            insert_columns=insert_columns
+        )
+        comments = coerce_types(
+            comments,
+            schema['comments'],
+            insert_columns=insert_columns
+        )
+
     return df, comments
 
 
-def assign_integer_to_unique_values(input_series,
-                                    value_label='value',
-                                    new_integer_label='new_integer'):
+def assign_integer_to_unique_values(
+    input_series,
+    value_label='value',
+    new_integer_label='new_integer'
+):
 
     values = input_series.reset_index(name=value_label)
-    values.rename(columns={'index':'input_index'}, inplace=True)
+    values.rename(columns={'index': 'input_index'}, inplace=True)
     uniques = values[value_label].drop_duplicates()
     uniques = uniques.reset_index()
-    uniques.rename(columns={'index':new_integer_label}, inplace=True)
+    uniques.rename(columns={'index': new_integer_label}, inplace=True)
     values = values.merge(uniques)
     return values.set_index('input_index').sort_index()
