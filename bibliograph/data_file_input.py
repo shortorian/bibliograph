@@ -377,8 +377,10 @@ def load_bibtex(
     time = e - s
     load_time = time.seconds + time.microseconds * 1e-6
     s = datetime.now()
-    print('\tloaded {} records from bibtex file in {:.1f} seconds'
-          .format(len(data), load_time))
+    print(
+        '\tloaded {} records from bibtex file in {:.1f} seconds'
+        .format(len(data), load_time)
+    )
     print('\tsize of initial dataframe: {:.1f} mb'.format(_getsize(data)/1e6))
 
     # dump bibtex-formatted text of this dataset
@@ -408,13 +410,15 @@ def load_bibtex(
     # targets. in this case the targets are strings in a data column
     # labeled by assrtn_tgt_label and the strings are equivalent to
     # titles of documents.
-    label_map = _make_label_map(label_map_fname,
-                                node_types_fname,
-                                link_types_fname,
-                                'bibtex',
-                                assrtn_tgt_label,
-                                'title',
-                                'documents')
+    label_map = _make_label_map(
+        label_map_fname,
+        node_types_fname,
+        link_types_fname,
+        'bibtex',
+        assrtn_tgt_label,
+        'title',
+        'documents'
+    )
 
     # melt the input data
     data = _normalize_input_data(data, assrtn_tgt_label)
@@ -426,9 +430,11 @@ def load_bibtex(
     has_link = label_map['link_type'].notna()
     node_label_map = label_map.loc[has_link, :].copy()
     # drop extraneous label map columns
-    node_label_map.drop(labels=['metadata_column', 'context', 'note'],
-                        axis=1,
-                        inplace=True)
+    node_label_map.drop(
+        labels=['metadata_column', 'context', 'note'],
+        axis=1,
+        inplace=True
+    )
     # get nodes by merging data into the node label map
     node_data = data.merge(node_label_map, on='input_label')
 
@@ -456,11 +462,13 @@ def load_bibtex(
     metadata = _extract_metadata(data, label_map, string_parsers)
 
     # create a new TextNet object from this input
-    tn = bg.create_textnet_from_node_data(node_data,
-                                          assrtn_tgt_label,
-                                          label_map_fname=label_map_fname,
-                                          metadata=metadata,
-                                          md_sep=md_sep)
+    tn = bg.create_textnet_from_node_data(
+        node_data,
+        assrtn_tgt_label,
+        label_map_fname=label_map_fname,
+        metadata=metadata,
+        md_sep=md_sep
+    )
 
     # create a new entry in tn.sources
     new_sources_row = pd.DataFrame({'source': output_file}, index=[0])
@@ -471,8 +479,10 @@ def load_bibtex(
     time = e - s
     create_time = time.seconds + time.microseconds * 1e-6
 
-    print('\tcreated TextNet in {:.1f} seconds\n\toverall time {:.1f} '
-          'seconds'.format(create_time, load_time + create_time))
+    print(
+        '\tcreated TextNet in {:.1f} seconds\n\toverall time {:.1f} '
+        'seconds'.format(create_time, load_time + create_time)
+    )
 
     return tn
 
