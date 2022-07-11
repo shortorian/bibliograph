@@ -1,0 +1,13 @@
+entry_node_type,item_label,item_node_type,item_link_type,list_delimiter
+work,author,actor,author," and "
+work,editor,actor,superauthor," and "
+work,collaborator,actor,collaborator,
+work,title,work,title,
+work,journal,work,journal,
+work,booktitle,work,booktitle,
+work,school,actor,affiliation,
+work,year,date,published,
+work,volume,work,volume,
+work,number,work,number,
+work,pages,work,page,--
+work,doi,identifier,doi,
