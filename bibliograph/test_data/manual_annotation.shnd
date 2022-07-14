@@ -13,7 +13,7 @@ asmith_bwu__1999__bams__101__803__xxx,
     , qte__This is the abstract of the article. We did stuff and also found things., abstract p17
     , not__this is an article I made up for testing__ some note tags
     , not__here's a note with an escaped\__item separator and some "quotation marks"
-    , __weirdoPrefix__some_string_representation, new_relation, an|author__2199__some|other|source__x__x
+    , # __weirdoPrefix__some_string_representation, new_relation, an|author__2199__some|other|source__x__x
 asmith_bwu__2008__bams__110__1__zzz,
     , asmith_bwu__1999__bams__101__803__xxx
     , ack__margaret|lemone_some|other|person
