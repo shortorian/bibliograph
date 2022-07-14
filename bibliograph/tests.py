@@ -1,5 +1,6 @@
 import bibliograph as bg
 
+
 def test_manual_annotation_node_type_14_is_file():
 
     tn = bg.slurp_shorthand(
@@ -17,6 +18,7 @@ def test_manual_annotation_node_type_14_is_file():
     )
 
     assert (tn.id_lookup('node_types', 'file', column_label='node_type') == 14)
+
 
 def test_manual_annotation_last_string_index_is_64():
 
@@ -38,6 +40,7 @@ def test_manual_annotation_last_string_index_is_64():
 
     assert (file_string.index[0] == 64)
 
+
 def test_manual_annotation_last_string_node_type_id_is_14():
 
     tn = bg.slurp_shorthand(
@@ -57,6 +60,7 @@ def test_manual_annotation_last_string_node_type_id_is_14():
     file_string = tn.strings.query('node_type_id == 14')
 
     assert (file_string.node_type_id.squeeze() == 14)
+
 
 def test_manual_annotation_node_type_0_is_shorthand_text():
 
