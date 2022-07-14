@@ -56,7 +56,7 @@ def test_manual_annotation_last_string_node_type_id_is_14():
 
     file_string = tn.strings.query('node_type_id == 14')
 
-    assert (file_string.node_type_id == 14)
+    assert (file_string.node_type_id.squeeze() == 14)
 
 def test_manual_annotation_node_type_0_is_shorthand_text():
 
@@ -121,6 +121,6 @@ def test_manual_annotation_shorthand_text_string_startswith():
     )
 
     shorthand_text_string = tn.strings.query('node_type_id == 0')
-    assert (shorthand_text_string.string.startswith(
+    assert (shorthand_text_string.string.squeeze().startswith(
         'This is stuff shorthand ignores'
     ))
