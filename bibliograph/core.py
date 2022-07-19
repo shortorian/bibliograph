@@ -247,6 +247,8 @@ def slurp_bibtex(
 
         entry_writer = btwriter
 
+    # drop 'entry_writer' from the input args so we can pass it directly
+    # to Shorthand.parse_items
     kwargs = {k: v for k, v in kwargs.items() if k != 'entry_writer'}
 
     # parse input
