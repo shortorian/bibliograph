@@ -51,23 +51,7 @@ def _make_input_text_node_with_metadata(tn, parsed):
     }
 
     tn._insert_metadata_table(text_node_type, text_metadata)
-    '''
-    text_node_type_id = tn.id_lookup(
-        'node_types',
-        text_node_type,
-        column_label='node_type'
-    )
-    text_node_id = tn.nodes.query(
-        'node_type_id == @text_node_type_id'
-    )
-    text_node_id = text_node_id.index[0]
-    text_metadata = {
-        k: (v if v is not None else pd.NA) for k, v in text_metadata.items()
-    }
-    tn.node_metadata_tables[text_node_type] = pd.DataFrame(
-        text_metadata,
-        index=pd.Index([0], dtype=tn.big_id_dtype)
-    )'''
+
 
 def textnet_from_parsed_shorthand(
     parsed,
