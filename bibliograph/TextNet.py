@@ -37,7 +37,7 @@ class TextNet():
             except KeyError:
                 raise error
 
-    def _insert_metadata_table(self, node_type, metadata):
+    def insert_metadata_table(self, node_type, metadata):
 
         node_type_id = self.id_lookup(
             'node_types',
@@ -58,6 +58,8 @@ class TextNet():
             metadata_table,
             index=pd.Index([0], dtype=self.big_id_dtype)
         )
+
+    def insert_link_type
 
     def id_lookup(self, attr, string, column_label='string'):
         '''

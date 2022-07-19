@@ -27,7 +27,7 @@ def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
         'allow_redundant_items': parsed_shnd.allow_redundant_items
     }
 
-    textnet._insert_metadata_table(syntax_node_type, metadata)
+    textnet.insert_metadata_table(syntax_node_type, metadata)
 
 
 def textnet_from_parsed_shorthand(
@@ -154,7 +154,7 @@ def textnet_from_parsed_shorthand(
         'item_separator': parsed.item_separator
     }
 
-    tn._insert_metadata_table(text_node_type, text_metadata)
+    tn.insert_metadata_table(text_node_type, text_metadata)
 
     _make_syntax_metadata_table(tn, parsed, 'entry')
 
@@ -208,7 +208,7 @@ def slurp_bibtex(
             **kwargs
         )
 
-    return textnet_from_parsed_shorthand(parsed, bibtex_fname, 'file')
+    return textnet_from_parsed_shorthand(parsed, bibtex_fname, 'file_name')
 
 
 def slurp_shorthand(
