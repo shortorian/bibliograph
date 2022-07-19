@@ -27,7 +27,7 @@ class TextNet():
 
         try:
 
-            return getattr(self, attr)
+            return self.__getattribute__(attr)
 
         except AttributeError as error:
 
@@ -36,6 +36,28 @@ class TextNet():
 
             except KeyError:
                 raise error
+
+    def _insert_metadata_table(self, node_type, metadata):
+
+        node_type_id = self.id_lookup(
+            'node_types',
+            node_type,
+            column_label='node_type'
+        )
+        node_id = self.nodes.query('node_type_id == @node_type_id').index[0]
+
+        metadata_table = {'node_id': node_id, 'node_type_id': node_type_id}
+        metadata_table.update(metadata)
+
+        metadata_table = {
+            k: (v if v is not None else pd.NA)
+            for k, v in metadata_table.items()
+        }
+
+        self.node_metadata_tables[node_type] = pd.DataFrame(
+            metadata_table,
+            index=pd.Index([0], dtype=self.big_id_dtype)
+        )
 
     def id_lookup(self, attr, string, column_label='string'):
         '''

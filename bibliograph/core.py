@@ -7,6 +7,28 @@ from bibtexparser.bparser import BibTexParser as _bibtexparser
 from datetime import datetime
 
 
+def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
+
+    if entry_or_link not in ['entry', 'link']:
+        raise ValueError('entry_or_link must be either "entry" or "link')
+
+    try:
+        syntax_case_sensitive = parsed_shnd.__getattribute__(
+            entry_or_link + '_syntax_case_sensitive'
+        )
+
+    except AttributeError:
+        syntax_case_sensitive = parsed_shnd.syntax_case_sensitive
+
+    syntax_node_type = 'shorthand_{}_syntax'.format(entry_or_link)
+
+    metadata = {
+        'case_sensitive': syntax_case_sensitive,
+        'allow_redundant_items': parsed_shnd.allow_redundant_items
+    }
+
+    textnet._insert_metadata_table(syntax_node_type, metadata)
+
 def textnet_from_parsed_shorthand(
     parsed,
     input_source_string,
@@ -149,68 +171,10 @@ def textnet_from_parsed_shorthand(
         index=pd.Index([0], dtype=tn.big_id_dtype)
     )
 
-    try:
-        entry_syntax_case_sensitive = parsed.entry_syntax_case_sensitive
+    _make_syntax_metadata_table(tn, parsed, 'entry')
 
-    except AttributeError:
-        entry_syntax_case_sensitive = parsed.syntax_case_sensitive
-
-    entry_syntax_node_type_id = tn.id_lookup(
-        'node_types',
-        'shorthand_entry_syntax',
-        column_label='node_type'
-    )
-    entry_syntax_node_id = tn.nodes.query(
-        'node_type_id == @entry_syntax_node_type_id'
-    )
-    entry_syntax_node_id = entry_syntax_node_id.index[0]
-
-    entry_syntax_metadata = {
-        'node_id': entry_syntax_node_id,
-        'node_type_id': entry_syntax_node_type_id,
-        'case_sensitive': entry_syntax_case_sensitive,
-        'allow_redundant_items': parsed.allow_redundant_items
-    }
-    entry_syntax_metadata = {
-        k: (v if v is not None else pd.NA)
-        for k, v in entry_syntax_metadata.items()
-    }
-    tn.node_metadata_tables['shorthand_entry_syntax'] = pd.DataFrame(
-        entry_syntax_metadata,
-        index=pd.Index([0], dtype=tn.big_id_dtype)
-    )
-
-    if 'link_syntax' in parsed.node_types:
-
-        try:
-            link_syntax_case_sensitive = parsed.link_syntax_case_sensitive
-
-        except AttributeError:
-            link_syntax_case_sensitive = parsed.syntax_case_sensitive
-
-        link_syntax_node_type_id = tn.id_lookup(
-            'node_types',
-            'shorthand_link_syntax',
-            column_label='node_type'
-        )
-        link_syntax_node_id = tn.nodes.query(
-            'node_type_id == @link_syntax_node_type_id'
-        )
-        link_syntax_node_id = link_syntax_node_id.index[0]
-
-        link_syntax_metadata = {
-            'node_id': link_syntax_node_id,
-            'node_type_id': link_syntax_node_type_id,
-            'case_sensitive': link_syntax_case_sensitive
-        }
-        link_syntax_metadata = {
-            k: (v if v is not None else pd.NA)
-            for k, v in link_syntax_metadata.items()
-        }
-        tn.node_metadata_tables['shorthand_entry_syntax'] = pd.DataFrame(
-            link_syntax_metadata,
-            index=pd.Index([0], dtype=tn.big_id_dtype)
-        )
+    if 'shorthand_link_syntax' in parsed.node_types.array:
+        _make_syntax_metadata_table(tn, parsed, 'link')
 
     return tn
 
