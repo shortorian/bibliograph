@@ -29,6 +29,46 @@ def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
 
     textnet._insert_metadata_table(syntax_node_type, metadata)
 
+
+def _make_input_text_node_with_metadata(tn, parsed):
+
+    if 'shorthand_text' in parsed.node_types.array:
+        text_node_type = 'shorthand_text'
+    elif 'items_text' in parsed.node_types.array:
+        text_node_type = 'items_text'
+    else:
+        raise ValueError(
+            'Unrecognized input full text type.\nNone of '
+            '["shorthand_text", "items_text"] in parsed shorthand node '
+            'types.\n'
+        )
+
+    text_metadata = {
+        'space_char': parsed.space_char,
+        'na_string_values': parsed.na_string_values,
+        'na_node_type': parsed.na_node_type,
+        'item_separator': parsed.item_separator
+    }
+
+    tn._insert_metadata_table(text_node_type, text_metadata)
+    '''
+    text_node_type_id = tn.id_lookup(
+        'node_types',
+        text_node_type,
+        column_label='node_type'
+    )
+    text_node_id = tn.nodes.query(
+        'node_type_id == @text_node_type_id'
+    )
+    text_node_id = text_node_id.index[0]
+    text_metadata = {
+        k: (v if v is not None else pd.NA) for k, v in text_metadata.items()
+    }
+    tn.node_metadata_tables[text_node_type] = pd.DataFrame(
+        text_metadata,
+        index=pd.Index([0], dtype=tn.big_id_dtype)
+    )'''
+
 def textnet_from_parsed_shorthand(
     parsed,
     input_source_string,
@@ -135,41 +175,7 @@ def textnet_from_parsed_shorthand(
 
     tn.edge_tags = tn.assertion_tags.rename({'assertion_id': 'edge_id'})
 
-    if 'shorthand_text' in parsed.node_types.array:
-        text_node_type = 'shorthand_text'
-    elif 'items_text' in parsed.node_types.array:
-        text_node_type = 'items_text'
-    else:
-        raise ValueError(
-            'Unrecognized full input text type.\nNone of '
-            '["shorthand_text", "items_text"] in parsed shorthand.\n'
-        )
-
-    text_node_type_id = tn.id_lookup(
-        'node_types',
-        text_node_type,
-        column_label='node_type'
-    )
-    text_node_id = tn.nodes.query(
-        'node_type_id == @text_node_type_id'
-    )
-    text_node_id = text_node_id.index[0]
-
-    text_metadata = {
-        'node_id': text_node_id,
-        'node_type_id': text_node_type_id,
-        'space_char': parsed.space_char,
-        'na_string_values': parsed.na_string_values,
-        'na_node_type': parsed.na_node_type,
-        'item_separator': parsed.item_separator
-    }
-    text_metadata = {
-        k: (v if v is not None else pd.NA) for k, v in text_metadata.items()
-    }
-    tn.node_metadata_tables[text_node_type] = pd.DataFrame(
-        text_metadata,
-        index=pd.Index([0], dtype=tn.big_id_dtype)
-    )
+    _make_input_text_node_with_metadata(tn, parsed)
 
     _make_syntax_metadata_table(tn, parsed, 'entry')
 
