@@ -6,31 +6,7 @@ from bibtexparser.bibdatabase import BibDatabase as _bibtex_db
 from bibtexparser.bparser import BibTexParser as _bibtexparser
 from datetime import datetime
 
-
-def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
-
-    if entry_or_link not in ['entry', 'link']:
-        raise ValueError('entry_or_link must be either "entry" or "link')
-
-    try:
-        syntax_case_sensitive = parsed_shnd.__getattribute__(
-            entry_or_link + '_syntax_case_sensitive'
-        )
-
-    except AttributeError:
-        syntax_case_sensitive = parsed_shnd.syntax_case_sensitive
-
-    syntax_node_type = 'shorthand_{}_syntax'.format(entry_or_link)
-
-    metadata = {
-        'case_sensitive': syntax_case_sensitive,
-        'allow_redundant_items': parsed_shnd.allow_redundant_items
-    }
-
-    textnet.insert_metadata_table(syntax_node_type, metadata)
-
-
-def textnet_from_parsed_shorthand(
+def _assertions_from_parsed_shorthand(
     parsed,
     input_source_string,
     input_source_node_type
@@ -102,10 +78,12 @@ def textnet_from_parsed_shorthand(
         columns={'link_id': 'assertion_id'}
     )
 
-    '''
-    Now assume that all strings should refer to unique nodes and
-    generate nodes and edges tables on that basis.
-    '''
+    return tn
+
+
+def _complete_textnet_from_assertions(tn, parsed):
+
+    time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     tn.nodes = tn.strings.index.astype(tn.big_id_dtype).array
     tn.nodes = pd.DataFrame(
@@ -162,6 +140,46 @@ def textnet_from_parsed_shorthand(
         _make_syntax_metadata_table(tn, parsed, 'link')
 
     return tn
+
+
+def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
+
+    if entry_or_link not in ['entry', 'link']:
+        raise ValueError('entry_or_link must be either "entry" or "link')
+
+    try:
+        syntax_case_sensitive = parsed_shnd.__getattribute__(
+            entry_or_link + '_syntax_case_sensitive'
+        )
+
+    except AttributeError:
+        syntax_case_sensitive = parsed_shnd.syntax_case_sensitive
+
+    syntax_node_type = 'shorthand_{}_syntax'.format(entry_or_link)
+
+    metadata = {
+        'case_sensitive': syntax_case_sensitive,
+        'allow_redundant_items': parsed_shnd.allow_redundant_items
+    }
+
+    textnet.insert_metadata_table(syntax_node_type, metadata)
+
+
+def textnet_from_parsed_shorthand(
+    parsed,
+    input_source_string,
+    input_source_node_type
+):
+
+    tn = _assertions_from_parsed_shorthand(
+        parsed,
+        input_source_string,
+        input_source_node_type
+    )
+
+    # map aliases here if you want
+
+    return _complete_textnet_from_assertions(tn, parsed)
 
 
 def slurp_bibtex(
@@ -228,5 +246,7 @@ def slurp_shorthand(
     )
 
     parsed = s.parse_text(shorthand_fname, **kwargs)
+
+
 
     return textnet_from_parsed_shorthand(parsed, shorthand_fname, 'file')
