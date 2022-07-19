@@ -1,4 +1,5 @@
 import pandas as pd
+import shorthand as shnd
 
 
 class TextNet():
@@ -37,6 +38,54 @@ class TextNet():
             except KeyError:
                 raise error
 
+    def _insert_type(self, name, description, node_or_link):
+
+        table_name = node_or_link + '_types'
+        column_name = node_or_link + '_type'
+        existing_table = self.__getattribute__(table_name)
+
+        # exit code 0 means a new type was created
+        exit_code = 0
+
+        if name in existing_table.array:
+
+            existing_description = existing_table.loc[
+                existing_table[column_name] == description,
+                'description'
+            ]
+
+            if pd.notna(description):
+
+                if existing_description != description:
+                    # exit code 1 means the type and description already
+                    # existed and the existing description was
+                    # overwritten
+                    exit_code = 1
+
+                else:
+                    # exit code 2 means the type and description already
+                    # existed and nothing was changed
+                    return 2
+
+            else:
+                # exit code 3 means the type already existed and the
+                # caller passed a null description, but the existing
+                # entry had a description that was retained
+                return 3
+
+        new_row = {column_name: name, 'description': description}
+        new_row = shnd.util.normalize_types(new_row, existing_table)
+
+        self.__setattr__(table_name, pd.concat([existing_table, new_row]))
+
+        return exit_code
+
+    def insert_link_type(self, name, description=pd.NA):
+        return self._insert_type(name, description, 'link')
+
+    def insert_node_type(self, name, description=pd.NA):
+        return self._insert_type(name, description, 'node')
+
     def insert_metadata_table(self, node_type, metadata):
 
         node_type_id = self.id_lookup(
@@ -58,8 +107,6 @@ class TextNet():
             metadata_table,
             index=pd.Index([0], dtype=self.big_id_dtype)
         )
-
-    def insert_link_type
 
     def id_lookup(self, attr, string, column_label='string'):
         '''
