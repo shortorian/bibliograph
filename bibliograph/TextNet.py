@@ -23,19 +23,19 @@ class TextNet():
         if node_metadata_tables is None:
             self.node_metadata_tables = {}
 
-    def __getattribute__(self, attr):
+    def __getattr__(self, attr):
 
         try:
 
-            return super(TextNet, self).__getattribute__(attr)
+            return getattr(self, attr)
 
-        except AttributeError as err:
+        except AttributeError as error:
 
             try:
                 return self.node_metadata_tables[attr]
 
             except KeyError:
-                raise err
+                raise error
 
     def id_lookup(self, attr, string, column_label='string'):
         '''
