@@ -30,29 +30,6 @@ def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
     textnet._insert_metadata_table(syntax_node_type, metadata)
 
 
-def _make_input_text_node_with_metadata(tn, parsed):
-
-    if 'shorthand_text' in parsed.node_types.array:
-        text_node_type = 'shorthand_text'
-    elif 'items_text' in parsed.node_types.array:
-        text_node_type = 'items_text'
-    else:
-        raise ValueError(
-            'Unrecognized input full text type.\nNone of '
-            '["shorthand_text", "items_text"] in parsed shorthand node '
-            'types.\n'
-        )
-
-    text_metadata = {
-        'space_char': parsed.space_char,
-        'na_string_values': parsed.na_string_values,
-        'na_node_type': parsed.na_node_type,
-        'item_separator': parsed.item_separator
-    }
-
-    tn._insert_metadata_table(text_node_type, text_metadata)
-
-
 def textnet_from_parsed_shorthand(
     parsed,
     input_source_string,
@@ -159,7 +136,25 @@ def textnet_from_parsed_shorthand(
 
     tn.edge_tags = tn.assertion_tags.rename({'assertion_id': 'edge_id'})
 
-    _make_input_text_node_with_metadata(tn, parsed)
+    if 'shorthand_text' in parsed.node_types.array:
+        text_node_type = 'shorthand_text'
+    elif 'items_text' in parsed.node_types.array:
+        text_node_type = 'items_text'
+    else:
+        raise ValueError(
+            'Unrecognized input full text type.\nNone of '
+            '["shorthand_text", "items_text"] in parsed shorthand node '
+            'types.\n'
+        )
+
+    text_metadata = {
+        'space_char': parsed.space_char,
+        'na_string_values': parsed.na_string_values,
+        'na_node_type': parsed.na_node_type,
+        'item_separator': parsed.item_separator
+    }
+
+    tn._insert_metadata_table(text_node_type, text_metadata)
 
     _make_syntax_metadata_table(tn, parsed, 'entry')
 
