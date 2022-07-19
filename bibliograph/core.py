@@ -6,6 +6,7 @@ from bibtexparser.bibdatabase import BibDatabase as _bibtex_db
 from bibtexparser.bparser import BibTexParser as _bibtexparser
 from datetime import datetime
 
+
 def _assertions_from_parsed_shorthand(
     parsed,
     input_source_string,
@@ -246,7 +247,5 @@ def slurp_shorthand(
     )
 
     parsed = s.parse_text(shorthand_fname, **kwargs)
-
-
 
     return textnet_from_parsed_shorthand(parsed, shorthand_fname, 'file')
