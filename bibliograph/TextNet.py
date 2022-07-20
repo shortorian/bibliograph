@@ -108,7 +108,7 @@ class TextNet():
             index=pd.Index([0], dtype=self.big_id_dtype)
         )
 
-    def id_lookup(self, attr, string, column_label='string'):
+    def id_lookup(self, attr, string, column_label=None):
         '''
         Take the name of an attribute of ParsedShorthand. If the
         attribute is a pandas Series or DataFrame, return the numerical
@@ -130,6 +130,12 @@ class TextNet():
 
         attribute = self.__getattribute__(attr)
 
+        default_columns = {
+            'strings': 'string',
+            'node_types': 'node_type',
+            'link_types': 'link_type'
+        }
+
         try:
             # If this assertion passes, assume attribute is a Series
             assert attribute.str
@@ -138,11 +144,16 @@ class TextNet():
 
         except AttributeError:
             # Otherwise assume attribute is a DataFrame
-            if column_label == 'string' and attr != 'strings':
-                raise ValueError(
-                    'Must use column_label keyword when indexing a '
-                    'DataFrame'
-                )
+            if column_label is None:
+
+                if attr not in default_columns.keys():
+                    raise ValueError(
+                        'Must use column_label keyword when indexing {}'
+                        .format(attr)
+                    )
+
+                else:
+                    column_label = default_columns[attr]
 
             element = attribute.loc[attribute[column_label] == string]
 
