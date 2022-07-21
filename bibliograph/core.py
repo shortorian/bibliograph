@@ -7,6 +7,7 @@ from bibtexparser.bibdatabase import BibDatabase as _bibtex_db
 from bibtexparser.bparser import BibTexParser as _bibtexparser
 from datetime import datetime
 from io import StringIO
+from pathlib import Path
 
 
 def _select_aliases(
@@ -251,8 +252,9 @@ def _insert_alias_assertions(
     # make a string value representing the current python function
     frame = inspect.currentframe()
     current_module = inspect.getframeinfo(frame).filename
+    current_module = Path(current_module).stem.split('.')[0]
     current_function = inspect.getframeinfo(frame).function
-    inp_string = '.'.join([current_module, current_function])
+    inp_string = '.'.join(['bibliograph', current_module, current_function])
 
     # Insert a strings row for the input string
     new_string = {
