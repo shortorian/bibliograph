@@ -17,7 +17,9 @@ def test_manual_annotation_node_type_14_is_file():
         comment_char='#'
     )
 
-    assert (tn.id_lookup('node_types', 'file_name', column_label='node_type') == 14)
+    assert (
+        tn.id_lookup('node_types', 'file_name', column_label='node_type') == 14
+    )
 
 
 def test_manual_annotation_last_string_index_is_64():
