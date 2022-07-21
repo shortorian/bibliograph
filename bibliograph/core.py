@@ -1,10 +1,75 @@
 import bibliograph as bg
 import pandas as pd
 import shorthand as shnd
+import inspect
 from bibtexparser import dumps as _dump_bibtex_string
 from bibtexparser.bibdatabase import BibDatabase as _bibtex_db
 from bibtexparser.bparser import BibTexParser as _bibtexparser
 from datetime import datetime
+from io import StringIO
+
+
+def _select_aliases(
+    aliases,
+    parsed,
+    node_type,
+    case_sensitive=True,
+    **kwargs
+):
+
+    if parsed.strings.empty or aliases.empty:
+        return
+
+    aliases.columns = ['key', 'value']
+    aliases.loc[:, 'key'] = aliases['key'].ffill()
+
+    aliases = aliases.query('key != value')
+    aliases = aliases.drop_duplicates()
+
+    if aliases['key'].isin(aliases['value']).any():
+
+        keys_and_values = pd.concat([
+            aliases['key'].drop_duplicates(),
+            aliases['value'].drop_duplicates()
+        ])
+        keys_and_values = keys_and_values.loc[keys_and_values.duplicated()]
+
+        raise ValueError(
+            'The following aliases appear as both keys and values: {}'
+            .format(set(keys_and_values))
+        )
+
+    if not case_sensitive:
+
+        aliases = aliases.copy()
+        aliases.loc[:, 'key'] = aliases['key'].str.casefold().array
+
+        aliases = aliases.query('key != value')
+        aliases = aliases.drop_duplicates()
+
+    collisions = aliases['value'].duplicated()
+    if collisions.any():
+        raise ValueError(
+            'The following aliases are mapped to multiple values when '
+            'case_sensitive is {0}: {1}'
+            .format(case_sensitive, set(aliases.loc[collisions, 1]))
+        )
+
+    strings = bg.util.get_string_values(
+        parsed,
+        casefold=(not case_sensitive),
+        node_type_subset=node_type
+    )
+
+    key_in_strings = aliases['key'].isin(strings)
+
+    if not key_in_strings.any():
+        return pd.DataFrame(columns=aliases.columns)
+
+    else:
+        aliases = aliases.loc[key_in_strings, :]
+
+    return aliases
 
 
 def _assertions_from_parsed_shorthand(
@@ -70,7 +135,7 @@ def _assertions_from_parsed_shorthand(
 
     # create the link_types table
     tn.link_types = pd.DataFrame(
-        {'node_type': parsed.link_types.array, 'description': pd.NA},
+        {'link_type': parsed.link_types.array, 'description': pd.NA},
         index=parsed.link_types.index.astype(tn.small_id_dtype)
     )
 
@@ -80,6 +145,151 @@ def _assertions_from_parsed_shorthand(
     )
 
     return tn
+
+
+def _read_file_from_path_or_read_str_as_buffer(
+    filepath_or_string_data,
+    reader=None,
+    **kwargs
+):
+
+    try:
+        return reader(filepath_or_string_data, **kwargs)
+
+    except FileNotFoundError:
+        return reader(StringIO(filepath_or_string_data), **kwargs)
+
+
+def _insert_alias_assertions(
+    tn,
+    parsed,
+    aliases_dict,
+    aliases_case_sensitive
+):
+
+    time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    # convert aliases_dict into dictionary of dataframes
+    aliases = {
+        k: _read_file_from_path_or_read_str_as_buffer(
+            v, pd.read_csv, encoding='utf8', skipinitialspace=True
+        )
+        for k, v in aliases_dict.items()
+        if k in tn.node_types['node_type'].array
+    }
+
+    # Get relevant aliases out of each set of aliases
+    aliases = {
+        k: _select_aliases(v, parsed, k, aliases_case_sensitive)
+        for k, v in aliases.items()
+    }
+
+    # get integer IDs for the relevant node types
+    node_type_ids = {
+        k: tn.id_lookup('node_types', k, column_label='node_type')
+        for k in aliases.keys()
+    }
+
+    # add any new strings we found to the textnet strings frame
+    new_strings = [
+        pd.DataFrame({
+            'string': v.stack().array,
+            'node_type_id': node_type_ids[k]
+        })
+        for k, v in aliases.items()
+    ]
+    new_strings = pd.concat(new_strings)
+
+    # Add a node type for alias reference strings and add the alias
+    # reference strings to the new strings
+    tn.insert_node_type('alias_reference')
+    alias_ref_node_id = tn.id_lookup('node_types', 'alias_reference')
+    alias_ref_strings = pd.DataFrame({
+        'string': aliases_dict.values(),
+        'node_type_id': alias_ref_node_id
+    })
+    new_strings = pd.concat([new_strings, alias_ref_strings])
+
+    # drop any strings already present in tn.strings
+    new_strings = new_strings.loc[
+        ~new_strings['string'].isin(tn.strings['string'])
+    ]
+
+    # Insert the new strings in tn.strings
+    new_strings = shnd.util.normalize_types(new_strings, tn.strings)
+    tn.strings = pd.concat([tn.strings, new_strings])
+
+    # make maps between string values and integer IDs relevant to each
+    # set of aliases
+    string_maps = {
+        k: bg.util.get_string_values(tn, node_type_subset=v)
+        for k, v in node_type_ids.items()
+    }
+    string_maps = {
+        k: pd.Series(v.index, index=v.array)
+        for k, v in string_maps.items()
+    }
+
+    # convert alias string values to integer string IDs
+    aliases = {
+        k: v.apply(lambda x: x.map(string_maps[k]))
+        for k, v in aliases.items()
+    }
+
+    # Start building an assertions frame out of string values
+    new_assertions = {
+        k: pd.DataFrame({
+            'src_string_id': aliases[k]['key'],
+            'tgt_string_id': aliases[k]['value'],
+            'ref_string_id': tn.id_lookup('strings', v)
+        })
+        for k, v in aliases_dict.items()
+    }
+
+    new_assertions = pd.concat(new_assertions.values(), ignore_index=True)
+
+    # make a string value representing the current python function
+    frame = inspect.currentframe()
+    current_module = inspect.getframeinfo(frame).filename
+    current_function = inspect.getframeinfo(frame).function
+    inp_string = '.'.join([current_module, current_function])
+
+    # Insert a strings row for the input string
+    new_string = {
+        'string': inp_string,
+        'node_type_id': tn.id_lookup('node_types', 'python_function')
+    }
+    new_string = shnd.util.normalize_types(new_string, tn.strings)
+    tn.strings = pd.concat([tn.strings, new_string])
+
+    # Add a link type for aliases if it doesn't already exist
+    tn.insert_link_type('alias')
+    alias_link_type_id = tn.id_lookup('link_types', 'alias')
+
+    # make a dataframe with the remaining data for the assertions
+    # frame and then concat it with the partial assertions frame
+    assertion_metadata = pd.DataFrame(
+        {
+            'inp_string_id': tn.strings.index[-1],
+            'link_type_id': alias_link_type_id,
+            'date_inserted': time_string,
+            'date_modified': pd.NA
+        },
+        index=new_assertions.index
+    )
+    new_assertions = pd.concat(
+        [new_assertions, assertion_metadata],
+        axis='columns'
+    )
+
+    # put the new assertions columns in the right order and then
+    # add them to the textnet assertions
+    new_assertions = new_assertions[tn.assertions.columns]
+    new_assertions = shnd.util.normalize_types(
+        new_assertions,
+        tn.assertions
+    )
+    tn.assertions = pd.concat([tn.assertions, new_assertions])
 
 
 def _complete_textnet_from_assertions(tn, parsed):
@@ -113,7 +323,9 @@ def _complete_textnet_from_assertions(tn, parsed):
         'ref_string_id': 'ref_node_id',
     })
 
-    tn.edge_tags = tn.assertion_tags.rename({'assertion_id': 'edge_id'})
+    tn.edge_tags = tn.assertion_tags.rename(
+        columns={'assertion_id': 'edge_id'}
+    )
 
     if 'shorthand_text' in parsed.node_types.array:
         text_node_type = 'shorthand_text'
@@ -169,7 +381,9 @@ def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
 def textnet_from_parsed_shorthand(
     parsed,
     input_source_string,
-    input_source_node_type
+    input_source_node_type,
+    aliases_dict=None,
+    aliases_case_sensitive=True
 ):
 
     tn = _assertions_from_parsed_shorthand(
@@ -178,7 +392,13 @@ def textnet_from_parsed_shorthand(
         input_source_node_type
     )
 
-    # map aliases here if you want
+    if aliases_dict is not None:
+        _insert_alias_assertions(
+            tn,
+            parsed,
+            aliases_dict,
+            aliases_case_sensitive
+        )
 
     return _complete_textnet_from_assertions(tn, parsed)
 
