@@ -19,7 +19,17 @@ class TextNet():
         small_id_dtype=pd.Int8Dtype()
     ):
 
-        [self.__setattr__(k, v) for k, v in locals().items() if k != 'self']
+        [
+            self.__setattr__(k, v) for k, v in locals().items()
+            if (k != 'self' and v is not None)
+        ]
+
+        self._string_side_tables = [
+            'strings', 'assertions', 'link_types', 'assertion_tags'
+        ]
+        self._node_side_tables = [
+            'nodes', 'edges', 'node_types', 'edge_tags'
+        ]
 
         if node_metadata_tables is None:
             self.node_metadata_tables = {}
@@ -33,10 +43,25 @@ class TextNet():
         except AttributeError as error:
 
             try:
+
                 return self.node_metadata_tables[attr]
 
             except KeyError:
-                raise error
+
+                if attr in self._string_side_tables:
+                    raise AttributeError(
+                        'assertions and strings not initialized for '
+                        'this TextNet'
+                    )
+
+                elif attr in self._node_side_tables:
+                    raise AttributeError(
+                        'nodes and edges not initialized for '
+                        'this TextNet'
+                    )
+
+                else:
+                    raise error
 
     def _insert_type(self, name, description, node_or_link):
 
