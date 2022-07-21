@@ -165,3 +165,185 @@ class TextNet():
             raise KeyError(string)
         elif length > 1:
             raise ValueError('{} index not unique!'.format(attr))
+
+    def map_string_id_to_node_type(self, string_id):
+
+        try:
+            int(string_id)
+
+            output = self.node_types.loc[
+                self.strings.loc[string_id, 'node_type_id'],
+                'node_type'
+            ]
+
+            return output[0]
+
+        except TypeError:
+
+            output = string_id.map(self.strings['node_type_id'])
+
+            return output.map(self.node_types['node_type'])
+
+    def resolve_assertions(self, node_types=True, tags=True):
+        '''
+        Get a copy of the assertions frame with all integer ID elements
+        replaced by the string values they represent
+
+        Parameters
+        ----------
+        node_types : bool, default True
+            If True, add columns for the node types of the source,
+            target, and reference strings (three additional columns).
+
+        tags : bool, default True
+            If True, add a column for assertion tags. All tags for a
+            link are joined into a single string separated by spaces.
+
+        Returns
+        -------
+        pandas.DataFrame
+        '''
+
+        assertions = self.assertions
+        string_map = self.strings['string']
+        lt_map = self.link_types['link_type']
+
+        resolved = pd.DataFrame(
+            {'inp_string': assertions['inp_string_id'].map(string_map),
+             'src_string': assertions['src_string_id'].map(string_map),
+             'tgt_string': assertions['tgt_string_id'].map(string_map),
+             'ref_string': assertions['ref_string_id'].map(string_map),
+             'link_type': assertions['link_type_id'].map(lt_map),
+             'date_inserted': assertions['date_inserted'],
+             'date_modified': assertions['date_modified']},
+            index=assertions.index
+        )
+
+        if node_types:
+            resolved['inp_node_type'] = self.map_string_id_to_node_type(
+                assertions['inp_string_id']
+            )
+            resolved['src_node_type'] = self.map_string_id_to_node_type(
+                assertions['src_string_id']
+            )
+            resolved['tgt_node_type'] = self.map_string_id_to_node_type(
+                assertions['tgt_string_id']
+            )
+            resolved['ref_node_type'] = self.map_string_id_to_node_type(
+                assertions['ref_string_id']
+            )
+
+        if tags is True:
+            # Resolve link tags as space-delimited lists
+            tags = self.assertion_tags.groupby('assertion_id')
+            tags = tags.apply(
+                lambda x:
+                ' '.join(self.strings.loc[x['tag_string_id'], 'string'])
+            )
+
+            resolved = resolved.join(tags.rename('tags'))
+
+        return resolved.fillna(pd.NA)
+
+    def resolve_edges(self, node_types=True, tags=True):
+        '''
+        Get a copy of the edges frame with all integer ID elements
+        replaced by the string values they represent
+
+        Parameters
+        ----------
+        node_types : bool, default True
+            If True, add columns for the node types of the source,
+            target, and reference strings (three additional columns).
+
+        tags : bool, default True
+            If True, add a column for assertion tags. All tags for a
+            link are joined into a single string separated by spaces.
+
+        Returns
+        -------
+        pandas.DataFrame
+        '''
+
+        edges = self.edges
+        string_map = self.strings['string']
+        lt_map = self.link_types['link_type']
+
+        resolved = pd.DataFrame(
+            {'src_string': edges['src_string_id'].map(string_map),
+             'tgt_string': edges['tgt_string_id'].map(string_map),
+             'ref_string': edges['ref_string_id'].map(string_map),
+             'link_type': edges['link_type_id'].map(lt_map),
+             'date_inserted': edges['date_inserted'],
+             'date_modified': edges['date_modified']},
+            index=edges.index
+        )
+
+        if node_types:
+            resolved['src_node_type'] = self.map_string_id_to_node_type(
+                edges['src_string_id']
+            )
+            resolved['tgt_node_type'] = self.map_string_id_to_node_type(
+                edges['tgt_string_id']
+            )
+            resolved['ref_node_type'] = self.map_string_id_to_node_type(
+                edges['ref_string_id']
+            )
+
+        if tags is True:
+            # Resolve link tags as space-delimited lists
+            tags = self.edge_tags.groupby('edge_id')
+            tags = tags.apply(
+                lambda x:
+                ' '.join(self.strings.loc[x['tag_string_id'], 'string'])
+            )
+
+            resolved = resolved.join(tags.rename('tags'))
+
+        return resolved.fillna(pd.NA)
+
+    def resolve_nodes(self):
+        '''
+        Get a copy of the nodes frame with all integer ID elements
+        replaced by the string values they represent
+
+        Returns
+        -------
+        pandas.DataFrame
+            Same shape and index as the strings frame.
+        '''
+
+        nodes = self.nodes
+        node_types = nodes['node_type_id'].map(self.node_types['node_type'])
+        name_strings = self.map_string_id_to_node_type(nodes['name_string_id'])
+        abbr_strings = self.map_string_id_to_node_type(nodes['abbr_string_id'])
+
+        resolved = pd.DataFrame(
+            {'node_type': node_types,
+             'name_string': name_strings,
+             'abbr_string': abbr_strings,
+             'date_inserted': nodes['date_inserted'],
+             'date_modified': nodes['date_modified']},
+            index=nodes.index
+        )
+
+        return resolved.fillna(pd.NA)
+
+    def resolve_strings(self):
+        '''
+        Get a copy of the strings frame with all integer ID elements
+        replaced by the string values they represent
+
+        Returns
+        -------
+        pandas.DataFrame
+            Same shape and index as the strings frame.
+        '''
+
+        resolved = self.strings.copy()
+
+        resolved['node_type_id'] = self.strings['node_type_id'].map(
+            self.node_types['node_type']
+        )
+
+        return resolved.rename(columns={'node_type_id': 'node_type'})
