@@ -22,5 +22,13 @@ setuptools.setup(
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English'
     ],
-    install_requires=[]
+    install_requires=[
+        'bibtexparser>=1.3.0',
+        'numpy>=1.23.1',
+        'pandas>=1.4.3',
+        'pyparsing>=3.0.9',
+        'python-dateutil>=2.8.2',
+        'pytz>=2022.1',
+        'six>=1.16.0'
+    ]
 )
