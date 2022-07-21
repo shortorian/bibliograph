@@ -408,7 +408,8 @@ def slurp_bibtex(
     entry_syntax_fname,
     syntax_case_sensitive=True,
     allow_redundant_items=False,
-    encoding='utf8',
+    aliases_dict=None,
+    aliases_case_sensitive=True,
     **kwargs
 ):
 
@@ -440,14 +441,22 @@ def slurp_bibtex(
     kwargs = {k: v for k, v in kwargs.items() if k != 'entry_writer'}
 
     # parse input
-    with open(bibtex_fname, encoding=encoding) as f:
+    with open(bibtex_fname, encoding='utf8') as f:
         parsed = s.parse_items(
             pd.DataFrame(bibtex_parser.parse_file(f).entries),
             entry_writer=entry_writer,
             **kwargs
         )
 
-    return textnet_from_parsed_shorthand(parsed, bibtex_fname, 'file_name')
+    tn = textnet_from_parsed_shorthand(
+        parsed,
+        bibtex_fname,
+        'file_name',
+        aliases_dict,
+        aliases_case_sensitive
+    )
+
+    return tn
 
 
 def slurp_shorthand(
@@ -456,6 +465,8 @@ def slurp_shorthand(
     link_syntax_fname=None,
     syntax_case_sensitive=True,
     allow_redundant_items=False,
+    aliases_dict=None,
+    aliases_case_sensitive=True,
     **kwargs
 ):
 
@@ -468,4 +479,12 @@ def slurp_shorthand(
 
     parsed = s.parse_text(shorthand_fname, **kwargs)
 
-    return textnet_from_parsed_shorthand(parsed, shorthand_fname, 'file')
+    tn = textnet_from_parsed_shorthand(
+        parsed,
+        shorthand_fname,
+        'file_name',
+        aliases_dict,
+        aliases_case_sensitive
+    )
+
+    return tn
