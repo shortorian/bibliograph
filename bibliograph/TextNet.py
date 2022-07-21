@@ -47,7 +47,7 @@ class TextNet():
         # exit code 0 means a new type was created
         exit_code = 0
 
-        if name in existing_table.array:
+        if name in existing_table[column_name].array:
 
             existing_description = existing_table.loc[
                 existing_table[column_name] == description,
