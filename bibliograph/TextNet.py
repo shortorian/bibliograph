@@ -49,66 +49,66 @@ class TextNet():
             self.node_metadata_tables = {}
 
         self._assertions_dtypes = {
-            'inp_string_id': self.big_id_dtype(),
-            'src_string_id': self.big_id_dtype(),
-            'tgt_string_id': self.big_id_dtype(),
-            'ref_string_id': self.big_id_dtype(),
-            'link_type_id': self.small_id_dtype(),
+            'inp_string_id': self.big_id_dtype,
+            'src_string_id': self.big_id_dtype,
+            'tgt_string_id': self.big_id_dtype,
+            'ref_string_id': self.big_id_dtype,
+            'link_type_id': self.small_id_dtype,
             'date_inserted': str,
             'date_modified': str
         }
-        self._assertions_index_dtype = self.big_id_dtype()
+        self._assertions_index_dtype = self.big_id_dtype
 
         self._strings_dtypes = {
-            'node_id': self.big_id_dtype(),
+            'node_id': self.big_id_dtype,
             'string': str,
             'date_inserted': str,
             'date_modified': str
         }
-        self._strings_index_dtype = self.big_id_dtype()
+        self._strings_index_dtype = self.big_id_dtype
 
         self._nodes_dtypes = {
-            'node_type_id': self.small_id_dtype(),
-            'name_string_id': self.big_id_dtype(),
-            'abbr_string_id': self.big_id_dtype(),
+            'node_type_id': self.small_id_dtype,
+            'name_string_id': self.big_id_dtype,
+            'abbr_string_id': self.big_id_dtype,
             'date_inserted': str,
             'date_modified': str
         }
-        self._nodes_index_dtype = self.big_id_dtype()
+        self._nodes_index_dtype = self.big_id_dtype
 
         self._edges_dtypes = {
-            'src_node_id': self.big_id_dtype(),
-            'tgt_node_id': self.big_id_dtype(),
-            'ref_node_id': self.big_id_dtype(),
-            'link_type_id': self.small_id_dtype(),
+            'src_node_id': self.big_id_dtype,
+            'tgt_node_id': self.big_id_dtype,
+            'ref_node_id': self.big_id_dtype,
+            'link_type_id': self.small_id_dtype,
             'date_inserted': str,
             'date_modified': str
         }
-        self._edges_index_dtype = self.big_id_dtype()
+        self._edges_index_dtype = self.big_id_dtype
 
         self._node_type_dtypes = {
             'node_type': str,
             'description': str
         }
-        self._node_type_index_dtype = self.small_id_dtype()
+        self._node_type_index_dtype = self.small_id_dtype
 
         self._link_type_dtypes = {
             'link_type': str,
             'description': str
         }
-        self._link_type_index_dtype = self.small_id_dtype()
+        self._link_type_index_dtype = self.small_id_dtype
 
         self._assertion_tags_dtypes = {
-            'assertion_id': self.big_id_dtype(),
-            'tag_string_id': self.big_id_dtype()
+            'assertion_id': self.big_id_dtype,
+            'tag_string_id': self.big_id_dtype
         }
-        self._assertion_tags_index_dtypes = self.big_id_dtype()
+        self._assertion_tags_index_dtypes = self.big_id_dtype
 
         self._edge_tags_dtypes = {
-            'edge_id': self.big_id_dtype(),
-            'tag_string_id': self.big_id_dtype()
+            'edge_id': self.big_id_dtype,
+            'tag_string_id': self.big_id_dtype
         }
-        self._edge_tags_index_dtypes = self.big_id_dtype()
+        self._edge_tags_index_dtypes = self.big_id_dtype
 
     def __getattr__(self, attr):
 
@@ -182,13 +182,17 @@ class TextNet():
         return exit_code
 
     def _reset_table_dtypes(self, table_name):
-        table_dtypes = '_{}_dtypes'
-        index_dtype = '_{}_index_dtype'
+        table_dtypes = self.__getattr__('_{}_dtypes'.format(table_name))
+        index_dtype = self.__getattr__('_{}_index_dtype'.format(table_name))
 
         table = self.__getattr__(table_name)
 
-        table = table.astype(self.__getattr__(table_dtypes))
-        table.index = table.index.astype(self.__getattr__(index_dtype))
+        table = table.astype(table_dtypes)
+        table.index = table.index.astype(index_dtype)
+        table = table[table_dtypes.keys()]
+        table = table.fillna(pd.NA)
+
+        self.__setattr__(table_name, table)
 
     def insert_link_type(self, name, description=pd.NA):
         return self._insert_type(name, description, 'link')
