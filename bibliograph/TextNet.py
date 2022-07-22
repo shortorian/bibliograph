@@ -378,8 +378,21 @@ class TextNet():
 
         resolved = self.strings.copy()
 
-        resolved['node_type_id'] = self.strings['node_type_id'].map(
-            self.node_types['node_type']
-        )
+        try:
 
-        return resolved.rename(columns={'node_type_id': 'node_type'})
+            assert self.nodes
+
+            resolved['node_type'] = resolved['node_id'].map(
+                self.nodes['node_type_id']
+            )
+            resolved['node_type'] = resolved['node_id'].map(
+                self.node_types['node_type']
+            )
+            return resolved[['node_id', 'string', 'node_type', 'date_inserted', 'date_modified']]
+
+        except AttributeError:
+
+            resolved['node_type_id'] = self.strings['node_type_id'].map(
+                self.node_types['node_type']
+            )
+            return resolved.rename(columns={'node_type_id': 'node_type'})
