@@ -102,13 +102,13 @@ class TextNet():
             'assertion_id': self.big_id_dtype,
             'tag_string_id': self.big_id_dtype
         }
-        self._assertion_tags_index_dtypes = self.big_id_dtype
+        self._assertion_tags_index_dtype = self.big_id_dtype
 
         self._edge_tags_dtypes = {
             'edge_id': self.big_id_dtype,
             'tag_string_id': self.big_id_dtype
         }
-        self._edge_tags_index_dtypes = self.big_id_dtype
+        self._edge_tags_index_dtype = self.big_id_dtype
 
     def __getattr__(self, attr):
 
