@@ -1,0 +1,14 @@
+This is stuff shorthand ignores when you use skiprows=1
+This should be skipped if skiprows=2
+left_entry, right_entry, link_tags_or_override, reference
+
+asmith_bwu__1999__bams__101__803__xxx,
+    , Alice Smith_Elizabeth Wu__1998__Bulletin of the American Meteorological Society__100__42__yyy
+    , NASA__1991__NASA Technical Reports__Project ABC TR no. 5
+    , aff__National Aeronautics and Space Administration_University of Chicago
+
+# Should have 7 actor strings, 11 work strings. aliases_actor.csv should add 1 additional actor string
+# When aliases_case_sensitive is false, 
+#     Should have 4 actor nodes, 10 work nodes. aliases_work.csv should add no additional strings
+# When aliases_case_sensitive is true,
+#     Should have 5 actor nodes, 

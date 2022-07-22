@@ -44,7 +44,9 @@ def _insert_alias_assertions(
     new_strings = [
         pd.DataFrame({
             'string': v.stack().array,
-            'node_type_id': node_type_ids[k]
+            'node_type_id': node_type_ids[k],
+            'date_inserted': time_string,
+            'date_modified': pd.NA
         })
         for k, v in aliases.items()
     ]
@@ -56,7 +58,9 @@ def _insert_alias_assertions(
     alias_ref_node_id = tn.id_lookup('node_types', 'alias_reference')
     alias_ref_strings = pd.DataFrame({
         'string': aliases_dict.values(),
-        'node_type_id': alias_ref_node_id
+        'node_type_id': alias_ref_node_id,
+        'date_inserted': time_string,
+        'date_modified': pd.NA
     })
     new_strings = pd.concat([new_strings, alias_ref_strings])
 
@@ -108,7 +112,9 @@ def _insert_alias_assertions(
     # Insert a strings row for the input string
     new_string = {
         'string': inp_string,
-        'node_type_id': tn.id_lookup('node_types', 'python_function')
+        'node_type_id': tn.id_lookup('node_types', 'python_function'),
+        'date_inserted': time_string,
+        'date_modified': pd.NA
     }
     new_string = shnd.util.normalize_types(new_string, tn.strings)
     tn.strings = pd.concat([tn.strings, new_string])
@@ -211,7 +217,7 @@ def _select_aliases(
 
     if not case_sensitive:
 
-        aliases = aliases.copy()
+        _aliases = aliases.copy()
         aliases.loc[:, 'key'] = aliases['key'].str.casefold().array
 
         aliases = aliases.query('key != value')
@@ -243,7 +249,13 @@ def _select_aliases(
             keys.index.get_level_values(0).drop_duplicates(),
             'key'
         ]
-        return aliases.loc[aliases['key'].isin(keys)]
+
+        if not case_sensitive:
+            return_index = aliases.loc[aliases['key'].isin(keys)].index
+            return _aliases.loc[return_index]
+
+        else:
+            return aliases.loc[aliases['key'].isin(keys)]
 
 
 def build_textnet_assertions(
@@ -286,15 +298,15 @@ def build_textnet_assertions(
     inp_string_id = pd.DataFrame(
         new_string.index[0],
         columns=['inp_string_id'],
-        index=parsed.links.index.astype(tn.big_id_dtype)
+        index=parsed.links.index
     )
-    inp_string_id = inp_string_id.astype({'inp_string_id': tn.big_id_dtype})
 
     # create the assertions table
     tn.assertions = pd.concat([inp_string_id, parsed.links], axis='columns')
     tn.assertions = tn.assertions.drop('list_position', axis='columns')
     tn.assertions.loc[:, 'date_inserted'] = time_string
     tn.assertions.loc[:, 'date_modified'] = pd.NA
+    tn.reset_assertions_dtypes()
 
     # create the strings table
     tn.strings = parsed.strings.copy()
@@ -303,20 +315,21 @@ def build_textnet_assertions(
 
     # create the node_types table
     tn.node_types = pd.DataFrame(
-        {'node_type': parsed.node_types.array, 'description': pd.NA},
-        index=parsed.node_types.index.astype(tn.small_id_dtype)
+        {'node_type': parsed.node_types.array, 'description': pd.NA}
     )
+    tn.reset_node_types_dtypes()
 
     # create the link_types table
     tn.link_types = pd.DataFrame(
-        {'link_type': parsed.link_types.array, 'description': pd.NA},
-        index=parsed.link_types.index.astype(tn.small_id_dtype)
+        {'link_type': parsed.link_types.array, 'description': pd.NA}
     )
+    tn.reset_link_types_dtypes()
 
     # create the assertion_tags table
     tn.assertion_tags = parsed.link_tags.rename(
         columns={'link_id': 'assertion_id'}
     )
+    tn.reset_assertion_tags_dtypes()
 
     return tn
 
@@ -397,14 +410,7 @@ def complete_textnet_from_assertions(tn, parsed):
             'date_modified': pd.NA
         })
 
-        tn.nodes = tn.nodes.astype({
-            'node_type_id': tn.small_id_dtype,
-            'name_string_id': tn.big_id_dtype,
-            'abbr_string_id': tn.big_id_dtype,
-            'date_inserted': str,
-            'date_modified': str
-        })
-        tn.nodes.index = tn.nodes.index.astype(tn.big_id_dtype)
+        tn.reset_nodes_dtypes()
 
         idx_of_strings_with_no_aliases = tn.strings.index.difference(
             aliased_node_id_map
@@ -430,8 +436,8 @@ def complete_textnet_from_assertions(tn, parsed):
             new_nodes.index
         )
 
-    except KeyError as e:
-        raise e
+    except KeyError:
+
         tn.nodes = pd.DataFrame(
             {
                 'node_type_id': tn.strings['node_type_id'],
@@ -442,26 +448,9 @@ def complete_textnet_from_assertions(tn, parsed):
             }
         )
 
-        tn.nodes = tn.nodes.astype({
-            'node_type_id': tn.small_id_dtype,
-            'name_string_id': tn.big_id_dtype,
-            'abbr_string_id': tn.big_id_dtype,
-            'date_inserted': str,
-            'date_modified': str
-        })
-        tn.nodes.index = tn.nodes.index.astype(tn.big_id_dtype)
-
         tn.strings['node_id'] = tn.nodes.index
 
-    tn.strings = tn.strings[
-        ['node_id', 'string', 'date_inserted', 'date_modified']
-    ]
-    tn.strings = tn.strings.astype({
-        'node_id': tn.big_id_dtype,
-        'string': str,
-        'date_inserted': str,
-        'date_modified': str
-    })
+    tn.reset_strings_dtypes()
 
     def map_assert_str_to_nodes(label):
         return tn.assertions[label].map(tn.strings['node_id'])
@@ -476,15 +465,7 @@ def complete_textnet_from_assertions(tn, parsed):
     })
     tn.edges = tn.edges.drop_duplicates().reset_index(drop=True)
 
-    tn.edges = tn.edges.astype({
-        'src_node_id': tn.big_id_dtype,
-        'tgt_node_id': tn.big_id_dtype,
-        'ref_node_id': tn.big_id_dtype,
-        'link_type_id': tn.small_id_dtype,
-        'date_inserted': str,
-        'date_modified': str
-    })
-    tn.edges.index = tn.edges.index.astype(tn.big_id_dtype)
+    tn.reset_edges_dtypes()
 
     tn.edge_tags = pd.DataFrame(columns=['edge_id', 'tag_string_id'])
 
