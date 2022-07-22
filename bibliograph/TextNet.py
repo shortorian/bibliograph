@@ -2,6 +2,14 @@ import pandas as pd
 import shorthand as shnd
 
 
+class AssertionsNotFoundError(AttributeError):
+    pass
+
+
+class NodesNotFoundError(AttributeError):
+    pass
+
+
 class TextNet():
 
     def __init__(
