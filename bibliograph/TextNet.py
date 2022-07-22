@@ -396,7 +396,13 @@ class TextNet():
             resolved['node_type'] = resolved['node_id'].map(
                 self.node_types['node_type']
             )
-            return resolved[['node_id', 'string', 'node_type', 'date_inserted', 'date_modified']]
+            return resolved[[
+                'node_id',
+                'string',
+                'node_type',
+                'date_inserted',
+                'date_modified'
+            ]]
 
         except AttributeError:
 
