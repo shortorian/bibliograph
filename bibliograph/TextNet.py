@@ -351,8 +351,8 @@ class TextNet():
 
         nodes = self.nodes
         node_types = nodes['node_type_id'].map(self.node_types['node_type'])
-        name_strings = self.map_string_id_to_node_type(nodes['name_string_id'])
-        abbr_strings = self.map_string_id_to_node_type(nodes['abbr_string_id'])
+        name_strings = nodes['name_string_id'].map(self.strings['string'])
+        abbr_strings = nodes['abbr_string_id'].map(self.strings['string'])
 
         resolved = pd.DataFrame(
             {'node_type': node_types,
