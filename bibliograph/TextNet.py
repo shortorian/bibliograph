@@ -496,7 +496,7 @@ class TextNet():
             resolved['node_type'] = resolved['node_id'].map(
                 self.nodes['node_type_id']
             )
-            resolved['node_type'] = resolved['node_id'].map(
+            resolved['node_type'] = resolved['node_type'].map(
                 self.node_types['node_type']
             )
             return resolved[[
