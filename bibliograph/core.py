@@ -33,6 +33,19 @@ def _insert_alias_assertions(
         k: _select_aliases(v, parsed, k, aliases_case_sensitive)
         for k, v in aliases.items()
     }
+    if not aliases_case_sensitive:
+        low_keys = {
+            k: v.apply(lambda x: x.str.casefold() if x.name == 'key' else x)
+            for k, v in aliases.items()
+        }
+        low_values = {
+            k: v.apply(lambda x: x.str.casefold() if x.name == 'value' else x)
+            for k, v in aliases.items()
+        }
+        aliases = {
+            k: pd.concat([v, low_keys[k], low_values[k]]).drop_duplicates()
+            for k, v in aliases.items()
+        }
 
     # get integer IDs for the relevant node types
     node_type_ids = {
@@ -51,7 +64,7 @@ def _insert_alias_assertions(
         for k, v in aliases.items()
     ]
     new_strings = pd.concat(new_strings).drop_duplicates()
-
+    # print(new_strings.string, '\n\n\n')
     # Add a node type for alias reference strings and add the alias
     # reference strings to the new strings
     tn.insert_node_type('alias_reference')
@@ -79,16 +92,66 @@ def _insert_alias_assertions(
         k: bg.util.get_string_values(tn, node_type_subset=v)
         for k, v in node_type_ids.items()
     }
+
+    if not aliases_case_sensitive:
+        low_maps = {k: v.str.casefold() for k, v in string_maps.items()}
+        case_alias = {
+            k: (v != low_maps[k]) for k, v in string_maps.items()
+        }
+        new_aliases = {
+            k: pd.concat(
+                [v[case_alias[k]], low_maps[k][case_alias[k]]],
+                axis='columns',
+                ignore_index=True
+            )
+            for k, v in string_maps.items()
+        }
+        new_aliases = {
+            k: v.rename(columns={0: 'key', 1: 'value'})
+            for k, v in new_aliases.items()
+        }
+        # print(new_aliases['actor'], '\n\n\n')
+        aliases = {
+            k: pd.concat([v, new_aliases[k]]) for k, v in aliases.items()
+        }
+
+    # print(string_maps['actor'], '\n\n\n')
+    # print(aliases['actor'], '\n\n\n')
+
     string_maps = {
         k: pd.Series(v.index, index=v.array)
         for k, v in string_maps.items()
     }
 
-    # convert alias string values to integer string IDs
+    '''# convert alias string values to integer string IDs
     aliases = {
         k: v.apply(lambda x: x.map(string_maps[k]))
         for k, v in aliases.items()
+    }'''
+
+    # convert alias keys to integer string IDs
+    def merge_keys_and_values(aliases, string_map):
+        k = aliases.merge(
+            string_map.rename('k'),
+            left_on='key',
+            right_index=True
+        )
+        v = aliases.merge(
+            string_map.rename('v'),
+            left_on='value',
+            right_index=True
+        )
+        output = k[['k', 'key']].merge(v[['v', 'key']])[['k', 'v']]
+        output = output.rename(columns={'k': 'key', 'v': 'value'})
+        return output.drop_duplicates()
+
+    aliases = {
+        k: merge_keys_and_values(v, string_maps[k]) for k, v in aliases.items()
     }
+    # print(
+    #     aliases['actor'].apply(lambda x: x.map(tn.strings['string'])),
+    #     '\n\n\n'
+    # )
 
     # Start building an assertions frame out of string values
     new_assertions = {
@@ -334,7 +397,7 @@ def build_textnet_assertions(
     return tn
 
 
-def complete_textnet_from_assertions(tn, parsed):
+def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
 
     time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -344,7 +407,6 @@ def complete_textnet_from_assertions(tn, parsed):
         alias_link_type_ID = tn.id_lookup('link_types', 'alias')
 
         aliases = tn.assertions.query('link_type_id == @alias_link_type_ID')
-
         aliases = aliases[['src_string_id', 'tgt_string_id']]
 
         src_node_types = aliases['src_string_id'].map(
@@ -360,11 +422,39 @@ def complete_textnet_from_assertions(tn, parsed):
                 'different node types'
             )
 
-        aliased_node_id_map = aliases['src_string_id'].unique()
-        aliased_node_id_map = pd.Series(
-            range(len(aliased_node_id_map)),
-            index=aliased_node_id_map
-        )
+        # print(aliases.apply(lambda x: x.map(tn.strings.string)))
+
+        if aliases_case_sensitive:
+
+            node_ids = aliases['src_string_id'].unique()
+            aliased_node_id_map = pd.Series(
+                range(len(node_ids)),
+                index=node_ids
+            )
+
+        else:
+
+            aliased_node_id_map = aliases['src_string_id'].map(
+                tn.strings['string']
+            )
+            aliased_node_id_map = aliased_node_id_map.str.casefold()
+
+            node_ids = aliased_node_id_map.unique()
+            node_ids = pd.Series(range(len(node_ids)), index=node_ids)
+
+            aliased_node_id_map = aliased_node_id_map.map(node_ids)
+
+            aliased_node_id_map = pd.concat(
+                [
+                    aliases['src_string_id'].rename('src_string_id'),
+                    aliased_node_id_map.rename('node_id')
+                ],
+                axis='columns')
+            aliased_node_id_map = aliased_node_id_map.drop_duplicates()
+            aliased_node_id_map = pd.Series(
+                aliased_node_id_map['node_id'].array,
+                index=aliased_node_id_map['src_string_id'].array
+            )
 
         aliases.index = pd.Index(
             aliases['src_string_id'].map(aliased_node_id_map)
@@ -519,7 +609,7 @@ def textnet_from_parsed_shorthand(
             aliases_case_sensitive
         )
 
-    return complete_textnet_from_assertions(tn, parsed)
+    return complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive)
 
 
 def slurp_bibtex(

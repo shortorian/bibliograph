@@ -7,8 +7,12 @@ asmith_bwu__1999__bams__101__803__xxx,
     , NASA__1991__NASA Technical Reports__Project ABC TR no. 5
     , aff__National Aeronautics and Space Administration_University of Chicago
 
-# Should have 7 actor strings, 11 work strings. aliases_actor.csv should add 1 additional actor string
-# When aliases_case_sensitive is false, 
-#     Should have 4 actor nodes, 10 work nodes. aliases_work.csv should add no additional strings
-# When aliases_case_sensitive is true,
-#     Should have 5 actor nodes, 
+# Should have 7 actor strings, 11 work strings.
+
+# aliases_actor.csv should add 1 additional actor string
+# aliases_work.csv should add no additional strings
+
+# When aliases_case_sensitive is False, 
+#     Should have 4 actor nodes, 10 work nodes. 
+# When aliases_case_sensitive is True,
+#     Should have 5 actor nodes, 10 work nodes.
