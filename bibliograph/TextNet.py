@@ -86,17 +86,17 @@ class TextNet():
         }
         self._edges_index_dtype = self.big_id_dtype
 
-        self._node_type_dtypes = {
+        self._node_types_dtypes = {
             'node_type': str,
             'description': str
         }
-        self._node_type_index_dtype = self.small_id_dtype
+        self._node_types_index_dtype = self.small_id_dtype
 
-        self._link_type_dtypes = {
+        self._link_types_dtypes = {
             'link_type': str,
             'description': str
         }
-        self._link_type_index_dtype = self.small_id_dtype
+        self._link_types_index_dtype = self.small_id_dtype
 
         self._assertion_tags_dtypes = {
             'assertion_id': self.big_id_dtype,
