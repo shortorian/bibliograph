@@ -211,9 +211,14 @@ class TextNet():
 
         except TypeError:
 
-            output = string_id.map(self.strings['node_type_id'])
+            try:
+                output = string_id.map(self.strings['node_type_id'])
+                return output.map(self.node_types['node_type'])
 
-            return output.map(self.node_types['node_type'])
+            except KeyError:
+                output = string_id.map(self.strings['node_id'])
+                output = output.map(self.nodes['node_type_id'])
+                return output.map(self.node_types['node_type'])
 
     def resolve_assertions(self, node_types=True, tags=True):
         '''
