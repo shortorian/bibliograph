@@ -54,16 +54,16 @@ class TextNet():
             'tgt_string_id': self.big_id_dtype,
             'ref_string_id': self.big_id_dtype,
             'link_type_id': self.small_id_dtype,
-            'date_inserted': str,
-            'date_modified': str
+            'date_inserted': 'object',
+            'date_modified': 'object'
         }
         self._assertions_index_dtype = self.big_id_dtype
 
         self._strings_dtypes = {
             'node_id': self.big_id_dtype,
             'string': str,
-            'date_inserted': str,
-            'date_modified': str
+            'date_inserted': 'object',
+            'date_modified': 'object'
         }
         self._strings_index_dtype = self.big_id_dtype
 
@@ -71,8 +71,8 @@ class TextNet():
             'node_type_id': self.small_id_dtype,
             'name_string_id': self.big_id_dtype,
             'abbr_string_id': self.big_id_dtype,
-            'date_inserted': str,
-            'date_modified': str
+            'date_inserted': 'object',
+            'date_modified': 'object'
         }
         self._nodes_index_dtype = self.big_id_dtype
 
@@ -81,20 +81,20 @@ class TextNet():
             'tgt_node_id': self.big_id_dtype,
             'ref_node_id': self.big_id_dtype,
             'link_type_id': self.small_id_dtype,
-            'date_inserted': str,
-            'date_modified': str
+            'date_inserted': 'object',
+            'date_modified': 'object'
         }
         self._edges_index_dtype = self.big_id_dtype
 
         self._node_types_dtypes = {
-            'node_type': str,
-            'description': str
+            'node_type': 'object',
+            'description': 'object'
         }
         self._node_types_index_dtype = self.small_id_dtype
 
         self._link_types_dtypes = {
-            'link_type': str,
-            'description': str
+            'link_type': 'object',
+            'description': 'object'
         }
         self._link_types_index_dtype = self.small_id_dtype
 
