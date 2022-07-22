@@ -26,11 +26,17 @@ class TextNet():
         big_id_dtype=pd.Int32Dtype(),
         small_id_dtype=pd.Int8Dtype()
     ):
-
-        [
-            self.__setattr__(k, v) for k, v in locals().items()
-            if (k != 'self' and v is not None)
-        ]
+        self.assertions = assertions
+        self.strings = strings
+        self.nodes = nodes
+        self.edges = edges
+        self.node_types = node_types
+        self.link_types = link_types
+        self.assertion_tags = assertion_tags
+        self.edge_tags = edge_tags
+        node_metadata_tables = node_metadata_tables
+        self.big_id_dtype = big_id_dtype
+        self.small_id_dtype = small_id_dtype
 
         self._string_side_tables = [
             'strings', 'assertions', 'link_types', 'assertion_tags'
@@ -41,6 +47,68 @@ class TextNet():
 
         if node_metadata_tables is None:
             self.node_metadata_tables = {}
+
+        self._assertions_dtypes = {
+            'inp_string_id': self.big_id_dtype(),
+            'src_string_id': self.big_id_dtype(),
+            'tgt_string_id': self.big_id_dtype(),
+            'ref_string_id': self.big_id_dtype(),
+            'link_type_id': self.small_id_dtype(),
+            'date_inserted': str,
+            'date_modified': str
+        }
+        self._assertions_index_dtype = self.big_id_dtype()
+
+        self._strings_dtypes = {
+            'node_id': self.big_id_dtype(),
+            'string': str,
+            'date_inserted': str,
+            'date_modified': str
+        }
+        self._strings_index_dtype = self.big_id_dtype()
+
+        self._nodes_dtypes = {
+            'node_type_id': self.small_id_dtype(),
+            'name_string_id': self.big_id_dtype(),
+            'abbr_string_id': self.big_id_dtype(),
+            'date_inserted': str,
+            'date_modified': str
+        }
+        self._nodes_index_dtype = self.big_id_dtype()
+
+        self._edges_dtypes = {
+            'src_node_id': self.big_id_dtype(),
+            'tgt_node_id': self.big_id_dtype(),
+            'ref_node_id': self.big_id_dtype(),
+            'link_type_id': self.small_id_dtype(),
+            'date_inserted': str,
+            'date_modified': str
+        }
+        self._edges_index_dtype = self.big_id_dtype()
+
+        self._node_type_dtypes = {
+            'node_type': str,
+            'description': str
+        }
+        self._node_type_index_dtype = self.small_id_dtype()
+
+        self._link_type_dtypes = {
+            'link_type': str,
+            'description': str
+        }
+        self._link_type_index_dtype = self.small_id_dtype()
+
+        self._assertion_tags_dtypes = {
+            'assertion_id': self.big_id_dtype(),
+            'tag_string_id': self.big_id_dtype()
+        }
+        self._assertion_tags_index_dtypes = self.big_id_dtype()
+
+        self._edge_tags_dtypes = {
+            'edge_id': self.big_id_dtype(),
+            'tag_string_id': self.big_id_dtype()
+        }
+        self._edge_tags_index_dtypes = self.big_id_dtype()
 
     def __getattr__(self, attr):
 
@@ -112,6 +180,15 @@ class TextNet():
         self.__setattr__(table_name, pd.concat([existing_table, new_row]))
 
         return exit_code
+
+    def _reset_table_dtypes(self, table_name):
+        table_dtypes = '_{}_dtypes'
+        index_dtype = '_{}_index_dtype'
+
+        table = self.__getattr__(table_name)
+
+        table = table.astype(self.__getattr__(table_dtypes))
+        table.index = table.index.astype(self.__getattr__(index_dtype))
 
     def insert_link_type(self, name, description=pd.NA):
         return self._insert_type(name, description, 'link')
@@ -227,6 +304,30 @@ class TextNet():
                 output = string_id.map(self.strings['node_id'])
                 output = output.map(self.nodes['node_type_id'])
                 return output.map(self.node_types['node_type'])
+
+    def reset_assertions_dtypes(self):
+        self._reset_table_dtypes('assertions')
+
+    def reset_strings_dtypes(self):
+        self._reset_table_dtypes('strings')
+
+    def reset_nodes_dtypes(self):
+        self._reset_table_dtypes('nodes')
+
+    def reset_edges_dtypes(self):
+        self._reset_table_dtypes('edges')
+
+    def reset_node_types_dtypes(self):
+        self._reset_table_dtypes('node_types')
+
+    def reset_link_types_dtypes(self):
+        self._reset_table_dtypes('link_types')
+
+    def reset_assertion_tags_dtypes(self):
+        self._reset_table_dtypes('assertion_tags')
+
+    def reset_edge_tags_dtypes(self):
+        self._reset_table_dtypes('edge_tags')
 
     def resolve_assertions(self, node_types=True, tags=True):
         '''
