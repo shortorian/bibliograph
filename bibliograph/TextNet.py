@@ -57,13 +57,13 @@ class TextNet():
             except KeyError:
 
                 if attr in self._string_side_tables:
-                    raise AttributeError(
+                    raise AssertionsNotFoundError(
                         'assertions and strings not initialized for '
                         'this TextNet'
                     )
 
                 elif attr in self._node_side_tables:
-                    raise AttributeError(
+                    raise NodesNotFoundError(
                         'nodes and edges not initialized for '
                         'this TextNet'
                     )
@@ -387,8 +387,6 @@ class TextNet():
         resolved = self.strings.copy()
 
         try:
-
-            assert self.nodes
 
             resolved['node_type'] = resolved['node_id'].map(
                 self.nodes['node_type_id']
