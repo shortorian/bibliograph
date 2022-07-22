@@ -118,7 +118,13 @@ class TextNet():
             node_type,
             column_label='node_type'
         )
-        node_id = self.nodes.query('node_type_id == @node_type_id').index[0]
+        node_id = self.nodes.query('node_type_id == @node_type_id').index
+
+        if len(node_id) > 1:
+            raise NotImplementedError(
+                "Can't yet handle metadata for multiple nodes of the "
+                "same type"
+            )
 
         metadata_table = {'node_id': node_id, 'node_type_id': node_type_id}
         metadata_table.update(metadata)
