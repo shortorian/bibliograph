@@ -64,7 +64,7 @@ def _insert_alias_assertions(
         for k, v in aliases.items()
     ]
     new_strings = pd.concat(new_strings).drop_duplicates()
-    
+
     # Add a node type for alias reference strings and add the alias
     # reference strings to the new strings
     tn.insert_node_type('alias_reference')
@@ -112,7 +112,7 @@ def _insert_alias_assertions(
             k: v.rename(columns={0: 'key', 1: 'value'})
             for k, v in new_aliases.items()
         }
-        
+
         aliases = {
             k: pd.concat([v, new_aliases[k]]) for k, v in aliases.items()
         }
@@ -602,7 +602,6 @@ def textnet_from_parsed_shorthand(
             aliases_dict,
             aliases_case_sensitive
         )
-
 
     return complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive)
 
