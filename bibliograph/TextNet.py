@@ -61,7 +61,7 @@ class TextNet():
 
         self._strings_dtypes = {
             'node_id': self.big_id_dtype,
-            'string': str,
+            'string': 'object',
             'date_inserted': 'object',
             'date_modified': 'object'
         }
