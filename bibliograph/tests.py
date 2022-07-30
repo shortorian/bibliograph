@@ -347,3 +347,131 @@ def test_aliasing_both_sets_num_case_insensitive_alias_assrtns_is_17():
     )
 
     assert len(tn.resolve_assertions().query('link_type == "alias"')) == 17
+
+
+def test_aliasing_node_6_work_bams_values():
+    
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    node_6_aliases = [
+        'bams',
+        'Bulletin of the American Meteorological Society',
+        'bulletin of the american meteorological society'
+    ]
+
+    strings_with_node_6 = tn.strings.loc[tn.strings['node_id'] == 6, 'string']
+
+    assert (strings_with_node_6 == node_6_aliases).all().all()
+
+
+def test_aliasing_node_0_actor_asmith_values():
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    node_0_aliases = ['asmith', 'Alice Smith', 'alice smith']
+
+    strings_with_node_0 = tn.strings.loc[tn.strings['node_id'] == 0, 'string']
+
+    assert (strings_with_node_0 == node_0_aliases).all().all()
+
+
+def test_aliasing_node_1_actor_bwu_values():
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    node_1_aliases = [
+        'bwu', 'Elizabeth Wu', 'Beth Wu', 'beth wu', 'elizabeth wu'
+    ]
+
+    strings_with_node_1 = tn.strings.loc[tn.strings['node_id'] == 1, 'string']
+
+    assert (strings_with_node_1 == node_1_aliases).all().all()
+
+
+def test_aliasing_node_2_actor_nasa_values():
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    node_2_aliases = [
+        'NASA',
+        'National Aeronautics and Space Administration',
+        'nasa',
+        'national aeronautics and space administration'
+    ]
+
+    strings_with_node_2 = tn.strings.loc[tn.strings['node_id'] == 2, 'string']
+
+    assert (strings_with_node_2 == node_2_aliases).all().all()
