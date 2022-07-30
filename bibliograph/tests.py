@@ -350,7 +350,7 @@ def test_aliasing_both_sets_num_case_insensitive_alias_assrtns_is_17():
 
 
 def test_aliasing_node_6_work_bams_values():
-    
+
     aliases_dict = {
         'actor': 'bibliograph/test_data/aliases_actor.csv',
         'work': 'bibliograph/test_data/aliases_work.csv'
