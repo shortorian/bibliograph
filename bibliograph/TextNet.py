@@ -513,3 +513,38 @@ class TextNet():
                 self.node_types['node_type']
             )
             return resolved.rename(columns={'node_type_id': 'node_type'})
+
+    def select_strings_by_node_type(self, node_type):
+
+        # if node_type is list-like, get the set
+        if shnd.util.iterable_not_string(node_type):
+
+            node_type_id = [
+                self.id_lookup('node_types', nt) for nt in node_type
+            ]
+
+            nodes = self.nodes.query(
+                'node_type_id.isin(@node_type_id)'
+            )
+
+        # if not list-like, first assume node_type is a string
+        try:
+
+            assert node_type.casefold()
+
+            node_type_id = self.id_lookup('node_types', node_type)
+
+            nodes = self.nodes.query(
+                'node_type_id == @node_type_id'
+            )
+
+        # if node_type doesn't have casefold, assume it's a numeric
+        # node type ID
+        except AttributeError:
+
+            nodes = self.nodes.query(
+                'node_type_id == @node_type'
+            )
+
+        nodes = nodes.index
+        return self.strings.query('node_id.isin(@nodes)')
