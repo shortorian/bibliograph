@@ -46,7 +46,7 @@ def get_string_values(
         return selection
 
 
-def make_bidirectional_map_many_to_one(df):
+def make_bidirectional_map_one_to_many(df):
 
     input_columns = list(df.columns)
     df.columns = [0, 1]
@@ -58,7 +58,7 @@ def make_bidirectional_map_many_to_one(df):
     # vs. view warning:
     # df = df.loc[df[0] != df[1], :]
 
-    # Check if the input dataframe is already a many-to-one map
+    # Check if the input dataframe is already a one-to-many map
     if not df[1].duplicated().any() and not df[1].isin(df[0]).any():
 
         return df
@@ -111,7 +111,7 @@ def make_bidirectional_map_many_to_one(df):
 
         df = df.drop(drop_rows)
 
-        # If the dataframe is now a many-to-one map, we're done
+        # If the dataframe is now a one-to-many map, we're done
         if not df[1].duplicated().any():
             if not df[1].isin(df[0]).any():
                 return df
@@ -240,4 +240,4 @@ def make_bidirectional_map_many_to_one(df):
     df.columns = input_columns
 
     # Remap the modified dataframe
-    return make_bidirectional_map_many_to_one(df)
+    return make_bidirectional_map_one_to_many(df)
