@@ -247,7 +247,7 @@ def _select_aliases(
 ):
 
     if parsed.strings.empty or aliases.empty:
-        return
+        return pd.DataFrame(columns=aliases.columns)
 
     aliases.columns = ['key', 'value']
     aliases.loc[:, 'key'] = aliases['key'].ffill()
@@ -276,13 +276,22 @@ def _select_aliases(
         aliases = aliases.query('key != value')
         aliases = aliases.drop_duplicates()
 
-    collisions = aliases['value'].duplicated()
-    if collisions.any():
-        raise ValueError(
-            'The following aliases are mapped to multiple values when '
-            'case_sensitive is {}: {}'
-            .format(case_sensitive, set(aliases.loc[collisions, 'value']))
-        )
+    value_collisions = aliases['value'].duplicated()
+    key_collisions = aliases['key'].duplicated()
+    if value_collisions.any():
+
+        if not key_collisions.any():
+            aliases.columns = ['value', 'key']
+
+        else:
+            raise ValueError(
+                'The following aliases are mapped to multiple values when '
+                'case_sensitive is {}: {}'
+                .format(
+                    case_sensitive,
+                    set(aliases.loc[value_collisions, 'value'])
+                )
+            )
 
     strings = bg.util.get_string_values(
         parsed,
@@ -393,11 +402,15 @@ def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
 
     # If there are alias links in the assertions table, map them to the
     # same node IDs
-    try:
+    if (tn.link_types['link_type'] == 'alias').any():
+
         alias_link_type_ID = tn.id_lookup('link_types', 'alias')
 
         aliases = tn.assertions.query('link_type_id == @alias_link_type_ID')
         aliases = aliases[['src_string_id', 'tgt_string_id']]
+
+        # convert aliases to a one-to-many map
+        aliases = bg.util.make_bidirectional_map_one_to_many(aliases)
 
         src_node_types = aliases['src_string_id'].map(
             tn.strings['node_type_id']
@@ -520,7 +533,7 @@ def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
             new_nodes.index.astype(tn.big_id_dtype)
         )
 
-    except KeyError:
+    else:
 
         tn.nodes = pd.DataFrame(
             {
@@ -602,6 +615,71 @@ def textnet_from_parsed_shorthand(
             aliases_dict,
             aliases_case_sensitive
         )
+
+    alias_generators = {
+        'actor': bg.alias_generators.western_surname_alias_generator_vector,
+        'identifier': bg.alias_generators.doi_alias_generator
+    }
+
+    strings = {
+        k: tn.select_strings_by_node_type(k) for k in alias_generators.keys()
+    }
+    aliases = {
+        k: alias_generators[k](v['string']) for k, v in dict(strings).items()
+    }
+
+    aliases = {
+        k: pd.DataFrame({
+            'string': v['string'].array,
+            'alias': aliases[k].array
+        })
+        for k, v in strings.items()
+    }
+
+    aliases = {k: v.dropna() for k, v in aliases.items()}
+
+    try:
+
+        alias_link_type = tn.id_lookup('link_types', 'alias')
+
+        existing_aliases = tn.assertions.query(
+            'link_type_id == @alias_link_type'
+        )
+        existing_aliases = pd.concat([
+            existing_aliases['src_string_id'].map(tn.strings['string']),
+            existing_aliases['tgt_string_id'].map(tn.strings['string'])
+        ])
+
+        '''string_already_aliased = {
+            k: v['string'].isin(existing_aliases) for k, v in aliases.items()
+        }
+        alias_already_present = {
+            k: v['alias'].isin(existing_aliases) for k, v in aliases.items()
+        }
+        masks = {
+            k: pd.DataFrame({
+                'string': string_already_aliased[k],
+                'alias': alias_already_present[k]
+            })
+            for k in aliases.keys()
+        }
+
+        aliases = {k: v.mask(masks[k]).dropna() for k, v in aliases.items()}'''
+
+    except KeyError:
+
+        pass
+
+    aliases_dict = {
+        k: StringIO(v.to_csv(index=False)) for k, v in aliases.items()
+    }
+
+    _insert_alias_assertions(
+        tn,
+        tn,
+        aliases_dict,
+        aliases_case_sensitive=False
+    )
 
     return complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive)
 

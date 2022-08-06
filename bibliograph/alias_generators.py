@@ -76,80 +76,173 @@ def western_surname_alias_generator_vector(
     name_series,
     drop_nouns=['ms', 'mrs', 'mr', 'dr', 'sir', 'dame'],
     generationals=['jr', 'sr'],
-    partial_surnames=['st', 'de', 'le', 'van', 'von']
+    partial_surnames=['st', 'de', 'le', 'van', 'von'],
+    exclusions=None
 ):
 
-    names = name_series.copy().loc[name_series.str.contains(',')]
-
-    names = names.str.casefold()
-
-    names = names.str.split(',', expand=True)
-    names = names.apply(lambda x: x.str.strip())
-
-    if len(names.columns) > 2:
-        more_fields = names[2].notna()
-
-    else:
-        more_fields = pd.Series(False, index=names[0].index)
-
-    names = names[[0, 1]]
+    if exclusions is None:
+        exclusions = [
+            'administration',
+            'university',
+            'national',
+            'institute',
+            'center'
+        ]
 
     drop_nouns = pd.Series(drop_nouns)
     drop_nouns = pd.concat([drop_nouns, drop_nouns.map(lambda x: x + '.')])
-    is_drop_noun = names[1].isin(drop_nouns)
-
-    if is_drop_noun.any():
-
-        selection = names[0].loc[is_drop_noun & ~more_fields].copy()
-        selection = selection.str.rsplit(' ', n=1, expand=True)
-
-        names[0].loc[selection.index] = selection[1]
-        names[1].loc[selection.index] = selection[0]
-
-        names[1].loc[is_drop_noun & more_fields] = pd.NA
 
     generationals = pd.Series(generationals)
     generationals = pd.concat([
         generationals,
         generationals.map(lambda x: x + '.')
     ])
-    is_generational = names[1].isin(generationals)
-
-    if is_generational.any():
-
-        gens = names[1].loc[is_generational & ~more_fields].copy()
-
-        selection = names[0].loc[is_generational & ~more_fields].copy()
-        selection = selection.str.rsplit(' ', n=1, expand=True)
-        slctn_idx = selection.index
-
-        names[0].loc[slctn_idx] = selection[1]
-        names[1].loc[slctn_idx] = selection[0]
-        names[1].loc[slctn_idx] = names[1].loc[slctn_idx] + ' ' + gens
-
-        names[1].loc[is_generational & more_fields] = pd.NA
-
-    for m in drop_nouns:
-        names = names.apply(lambda x: x.str.removeprefix(m))
-        names = names.apply(lambda x: x.str.removesuffix(m))
-
-    names = names.apply(lambda x: x.str.strip())
 
     partial_surnames = partial_surnames + [p + '.' for p in partial_surnames]
 
-    for p in partial_surnames:
+    concat_words_regex = r'[^\w]|[\d_]'
+    first_letters_regex = r'(?!\b)\w*|\W*?'
 
-        endswith_p = names[1].str.endswith(' ' + p).fillna(False)
+    split_names = name_series.str.contains(',')
+    plural_names = name_series.str.contains(' ')
+    plural_names = plural_names & ~split_names
 
-        names[0].loc[endswith_p] = p + ' ' + names[0].loc[endswith_p]
-        names[1].loc[endswith_p] = names[1].loc[endswith_p].str.slice(
-            stop=-len(p)
+    name_excluded = pd.Series(
+        sum([name_series.str.casefold().str.contains(s) for s in exclusions]),
+        dtype=bool
+    )
+    split_names = split_names & ~name_excluded
+    plural_names = plural_names & ~name_excluded
+
+    if split_names.any():
+
+        split_names = name_series.copy().loc[split_names]
+        split_names = split_names.str.casefold()
+
+        print(split_names)
+
+        split_names = split_names.str.split(',', expand=True)
+        split_names = split_names.apply(lambda x: x.str.strip())
+
+        if len(split_names.columns) > 2:
+            more_fields = split_names[2].notna()
+
+        else:
+            more_fields = pd.Series(False, index=split_names[0].index)
+
+        split_names = split_names[[0, 1]]
+
+        is_drop_noun = split_names[1].isin(drop_nouns)
+
+        if is_drop_noun.any():
+
+            selection = split_names.loc[is_drop_noun & ~more_fields, 0].copy()
+            selection = selection.str.rsplit(' ', n=1, expand=True)
+
+            split_names.loc[selection.index, 0] = selection[1]
+            split_names.loc[selection.index, 1] = selection[0]
+
+            split_names.loc[is_drop_noun & more_fields, 1] = pd.NA
+
+        is_generational = split_names[1].isin(generationals)
+
+        if is_generational.any():
+
+            gens = split_names[1].loc[is_generational & ~more_fields]
+
+            selection = split_names.loc[is_generational & ~more_fields, 0]
+            selection = selection.str.rsplit(' ', n=1, expand=True)
+            slctn_idx = selection.index
+
+            split_names.loc[slctn_idx, 0] = selection[1]
+            split_names.loc[slctn_idx, 1] = selection[0]
+            given_names = split_names.loc[slctn_idx, 1]
+            split_names.loc[slctn_idx, 1] = given_names + ' ' + gens
+
+            split_names.loc[is_generational & more_fields, 1] = pd.NA
+
+        for m in drop_nouns:
+            split_names = split_names.apply(lambda x: x.str.removeprefix(m))
+            split_names = split_names.apply(lambda x: x.str.removesuffix(m))
+
+        split_names = split_names.apply(lambda x: x.str.strip())
+
+        for p in partial_surnames:
+
+            endswith_p = split_names[1].str.endswith(' ' + p).fillna(False)
+
+            second_parts = split_names.loc[endswith_p, 0]
+            split_names.loc[endswith_p, 0] = p + ' ' + second_parts
+            given_names = split_names.loc[endswith_p, 1]
+            split_names.loc[endswith_p, 1] = given_names.str.slice(
+                stop=-len(p)
+            )
+
+        split_names[0] = split_names[0].str.replace(
+            concat_words_regex,
+            '',
+            regex=True
+        )
+        split_names[1] = split_names[1].str.replace(
+            first_letters_regex,
+            '',
+            regex=True
         )
 
-    names[0] = names[0].str.replace(r'[^\w]|[\d_]', '', regex=True)
-    names[1] = names[1].str.replace(r'(?!\b)\w*|\W*?', '', regex=True)
+    else:
 
-    aliases = (names[0] + names[1]).str.casefold()
+        split_names = pd.DataFrame(columns=[0, 1])
+
+    if plural_names.any():
+
+        plural_names = name_series.copy().loc[plural_names]
+
+        plural_names = plural_names.str.rsplit(' ', n=1, expand=True)
+        plural_names = plural_names.apply(lambda x: x.str.strip())
+
+        endswith_drop_noun = plural_names[1].isin(drop_nouns)
+        if endswith_drop_noun.any():
+            adjust_names = plural_names.loc[endswith_drop_noun, :]
+            adjust_names = adjust_names.str.rsplit(' ', n=1, expand=True)
+            adjust_names = adjust_names.apply(lambda x: x.str.strip())
+            plural_names.loc[endswith_drop_noun, :] = adjust_names.to_numpy()
+
+        endswith_generational = plural_names[1].isin(generationals)
+        if endswith_generational.any():
+            adjust_names = plural_names.loc[endswith_generational, :]
+            adjust_names = adjust_names.str.rsplit(' ', n=1, expand=True)
+            adjust_names = adjust_names.apply(lambda x: x.str.strip())
+            generationals = plural_names[endswith_generational, 1]
+            adjust_names[0] = adjust_names[0] + ' ' + generationals
+            plural_names.loc[endswith_generational, :] = adjust_names.to_numpy()
+
+        adjust_names = plural_names[0].str.rsplit(' ', n=1, expand=True)
+        if len(adjust_names.columns) > 1:
+            has_partial = adjust_names[1].isin(partial_surnames)
+            if has_partial.any():
+                second_parts = plural_names[has_partial, 1]
+                adjust_names = adjust_names.apply(lambda x: x.str.strip())
+                adjust_names[1] = adjust_names[1] + ' ' + second_parts
+                plural_names.loc[has_partial, :] = adjust_names.to_numpy()
+
+        surnames = plural_names[1].str.replace(
+            concat_words_regex,
+            '',
+            regex=True
+        )
+        plural_names[1] = plural_names[0].str.replace(
+            first_letters_regex,
+            '',
+            regex=True
+        )
+        plural_names[0] = surnames
+
+    else:
+
+        plural_names = pd.DataFrame(columns=[0, 1])
+
+    aliases = pd.concat([split_names, plural_names])
+    aliases = (aliases[0] + aliases[1]).str.casefold()
     aliases = pd.concat([
         aliases,
         pd.Series(pd.NA, index=name_series.index.difference(aliases.index))

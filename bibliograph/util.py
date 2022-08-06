@@ -60,7 +60,7 @@ def make_bidirectional_map_one_to_many(df):
 
     # Check if the input dataframe is already a one-to-many map
     if not df[1].duplicated().any() and not df[1].isin(df[0]).any():
-
+        df.columns = input_columns
         return df
 
     # Stack the values so we can find duplicate values regardless of the
@@ -114,6 +114,7 @@ def make_bidirectional_map_one_to_many(df):
         # If the dataframe is now a one-to-many map, we're done
         if not df[1].duplicated().any():
             if not df[1].isin(df[0]).any():
+                df.columns = input_columns
                 return df
 
         # Stack the modified dataframe and get duplicate values

@@ -523,9 +523,14 @@ class TextNet():
                 self.id_lookup('node_types', nt) for nt in node_type
             ]
 
-            nodes = self.nodes.query(
-                'node_type_id.isin(@node_type_id)'
-            )
+            if self.nodes is None:
+                selection = self.strings.query(
+                    'node_type_id.isin(@node_type_id)'
+                )
+            else:
+                selection = self.nodes.query(
+                    'node_type_id.isin(@node_type_id)'
+                )
 
         # if not list-like, first assume node_type is a string
         try:
@@ -534,17 +539,31 @@ class TextNet():
 
             node_type_id = self.id_lookup('node_types', node_type)
 
-            nodes = self.nodes.query(
-                'node_type_id == @node_type_id'
-            )
+            if self.nodes is None:
+                selection = self.strings.query(
+                    'node_type_id == @node_type_id'
+                )
+            else:
+                selection = self.nodes.query(
+                    'node_type_id == @node_type_id'
+                )
 
         # if node_type doesn't have casefold, assume it's a numeric
         # node type ID
         except AttributeError:
 
-            nodes = self.nodes.query(
-                'node_type_id == @node_type'
-            )
+            if self.nodes is None:
+                selection = self.strings.query(
+                    'node_type_id == @node_type'
+                )
+            else:
+                selection = self.nodes.query(
+                    'node_type_id == @node_type'
+                )
 
-        nodes = nodes.index
-        return self.strings.query('node_id.isin(@nodes)')
+        if self.nodes is None:
+            return selection
+
+        else:
+            string_index = selection.index
+            return self.strings.query('node_id.isin(@string_index)')
