@@ -607,7 +607,8 @@ def complete_textnet_from_assertions(
     tn,
     parsed,
     aliases_case_sensitive,
-    link_constraints_string_id
+    link_constraints_string_id,
+    links_excluded_from_edges
 ):
 
     time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -792,7 +793,8 @@ def complete_textnet_from_assertions(
         'space_char': parsed.space_char,
         'na_string_values': parsed.na_string_values,
         'na_node_type': parsed.na_node_type,
-        'item_separator': parsed.item_separator
+        'item_separator': parsed.item_separator,
+        'default_entry_prefix': parsed.default_entry_prefix
     }
 
     tn.insert_metadata_table(text_node_type, text_metadata)
@@ -835,14 +837,28 @@ def complete_textnet_from_assertions(
 
     tn.reset_nodes_dtypes()
 
+    if links_excluded_from_edges is not None:
+
+        excluded_link_type_ids = [
+            tn.id_lookup('link_types', t) for t in links_excluded_from_edges
+            if t in tn.link_types['link_type'].array
+        ]
+        assertion_selection = tn.assertions.loc[
+            ~tn.assertions['link_type_id'].isin(excluded_link_type_ids)
+        ]
+
+    else:
+
+        assertion_selection = tn.assertions
+
     def map_assert_str_to_nodes(label):
-        return tn.assertions[label].map(tn.strings['node_id']).array
+        return assertion_selection[label].map(tn.strings['node_id'])
 
     tn.edges = pd.DataFrame({
-        'src_node_id': map_assert_str_to_nodes('src_string_id'),
-        'tgt_node_id': map_assert_str_to_nodes('tgt_string_id'),
-        'ref_node_id': map_assert_str_to_nodes('ref_string_id'),
-        'link_type_id': tn.assertions['link_type_id'].array,
+        'src_node_id': map_assert_str_to_nodes('src_string_id').array,
+        'tgt_node_id': map_assert_str_to_nodes('tgt_string_id').array,
+        'ref_node_id': map_assert_str_to_nodes('ref_string_id').array,
+        'link_type_id': assertion_selection['link_type_id'].array,
         'date_inserted': time_string,
         'date_modified': pd.NA
     })
@@ -862,7 +878,8 @@ def textnet_from_parsed_shorthand(
     aliases_dict=None,
     aliases_case_sensitive=True,
     automatic_aliasing=False,
-    link_constraints_fname=None
+    link_constraints_fname=None,
+    links_excluded_from_edges=None
 ):
 
     tn = build_textnet_assertions(
@@ -960,7 +977,8 @@ def textnet_from_parsed_shorthand(
         tn,
         parsed,
         aliases_case_sensitive,
-        link_constraints_string_id=link_constraints_string_id
+        link_constraints_string_id=link_constraints_string_id,
+        links_excluded_from_edges=links_excluded_from_edges
     )
 
 
@@ -973,6 +991,7 @@ def slurp_bibtex(
     aliases_case_sensitive=True,
     automatic_aliasing=False,
     link_constraints_fname=None,
+    links_excluded_from_edges=None,
     **kwargs
 ):
 
@@ -1032,11 +1051,6 @@ def slurp_bibtex(
             **kwargs
         )
 
-    if automatic_aliasing is True or aliases_dict is not None:
-        raise NotImplementedError(
-            'aliasing not yet implemented for bibtex import'
-        )
-
     tn = textnet_from_parsed_shorthand(
         parsed,
         input_source_string,
@@ -1044,7 +1058,8 @@ def slurp_bibtex(
         aliases_dict,
         aliases_case_sensitive,
         automatic_aliasing,
-        link_constraints_fname
+        link_constraints_fname,
+        links_excluded_from_edges
     )
 
     return tn
@@ -1060,6 +1075,7 @@ def slurp_shorthand(
     aliases_case_sensitive=True,
     automatic_aliasing=False,
     link_constraints_fname=None,
+    links_excluded_from_edges=None,
     **kwargs
 ):
 
@@ -1100,7 +1116,8 @@ def slurp_shorthand(
         aliases_dict,
         aliases_case_sensitive,
         automatic_aliasing,
-        link_constraints_fname
+        link_constraints_fname,
+        links_excluded_from_edges
     )
 
     return tn
