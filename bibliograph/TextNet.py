@@ -153,18 +153,17 @@ class TextNet():
 
         if name in existing_table[column_name].array:
 
-            if pd.notna(description) and overwrite_description:
-                existing_row = existing_table[column_name] == name
-                existing_table.loc[existing_row, 'description'] = description
-                self.__setattr__(
-                    table_name,
-                    pd.concat([existing_table, new_row])
-                )
+            
 
-            return existing_row.loc[existing_row].index[0]
+            if pd.notna(description) and overwrite_description:
+                existing_row = (existing_table[column_name] == name)
+                existing_table.loc[existing_row, 'description'] = description
+                self.__setattr__(table_name, existing_table)
+
+            return self.id_lookup(table_name, name)
 
         else:
-            
+
             new_row = {column_name: name, 'description': description}
             new_row = shnd.util.normalize_types(new_row, existing_table)
 
