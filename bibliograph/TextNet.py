@@ -89,7 +89,8 @@ class TextNet():
         self._node_types_dtypes = {
             'node_type': 'object',
             'description': 'object',
-            'null_type': bool
+            'null_type': bool,
+            'has_metadata': bool
         }
         self._node_types_index_dtype = self.small_id_dtype
 
@@ -146,6 +147,7 @@ class TextNet():
         name,
         description,
         null_type,
+        has_metadata,
         node_or_link,
         overwrite_description
     ):
@@ -153,6 +155,11 @@ class TextNet():
         table_name = node_or_link + '_types'
         column_name = node_or_link + '_type'
         existing_table = self.__getattribute__(table_name)
+
+        if (node_or_link == 'link') and (has_metadata is not None):
+            raise ValueError(
+                'Cannot set "has_metadata" flag for link types'
+            )
 
         if name in existing_table[column_name].array:
 
@@ -171,6 +178,9 @@ class TextNet():
                 'null_type': bool(null_type)
             }
             new_row = shnd.util.normalize_types(new_row, existing_table)
+
+            if node_or_link == 'node':
+                new_row['has_metadata'] = bool(has_metadata)
 
             self.__setattr__(table_name, pd.concat([existing_table, new_row]))
 
@@ -223,6 +233,7 @@ class TextNet():
             name,
             description,
             null_type,
+            None,
             'link',
             overwrite_description
         )
@@ -232,12 +243,14 @@ class TextNet():
         name,
         description=pd.NA,
         null_type=False,
+        has_metadata=False,
         overwrite_description=False
     ):
         return self._insert_type(
             name,
             description,
             null_type,
+            has_metadata,
             'node',
             overwrite_description
         )
@@ -253,7 +266,7 @@ class TextNet():
 
         if len(node_id) > 1:
             raise NotImplementedError(
-                "Can't yet handle metadata for multiple nodes of the "
+                "Can't handle metadata for multiple nodes of the "
                 "same type"
             )
 
@@ -269,6 +282,8 @@ class TextNet():
             metadata_table,
             index=pd.Index([0], dtype=self.big_id_dtype)
         )
+
+        self.node_types.loc[node_type_id, 'has_metadata'] = True
 
     def id_lookup(self, attr, string, column_label=None):
         '''
