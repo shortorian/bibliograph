@@ -119,8 +119,6 @@ def western_surname_alias_generator_vector(
         split_names = name_series.copy().loc[split_names]
         split_names = split_names.str.casefold()
 
-        print(split_names)
-
         split_names = split_names.str.split(',', expand=True)
         split_names = split_names.apply(lambda x: x.str.strip())
 
