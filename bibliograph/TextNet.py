@@ -207,6 +207,11 @@ class TextNet():
         null_type_ids = self.get_null_link_type_ids()
         return self.links.loc[self.links['link_type_id'].isin(null_type_ids)]
 
+    def get_node_types_by_node_id(self, node_ids):
+        return self.nodes.loc[node_ids, 'node_type_id'].map(
+            self.node_types['node_type']
+        )
+
     def insert_link_type(
         self,
         name,
@@ -431,7 +436,12 @@ class TextNet():
 
         return resolved.fillna(pd.NA)
 
-    def resolve_edges(self, node_types=True, tags=True):
+    def resolve_edges(
+        self,
+        string_type='name',
+        node_types=True,
+        tags=True
+    ):
         '''
         Get a copy of the edges frame with all integer ID elements
         replaced by the string values they represent
@@ -452,13 +462,16 @@ class TextNet():
         '''
 
         edges = self.edges
-        string_map = self.strings['string']
         lt_map = self.link_types['link_type']
 
+        def map_to_strings(node_ids):
+            string_ids = node_ids.map(self.nodes[string_type + '_string_id'])
+            return string_ids.map(self.strings['string'])
+
         resolved = pd.DataFrame(
-            {'src_string': edges['src_string_id'].map(string_map),
-             'tgt_string': edges['tgt_string_id'].map(string_map),
-             'ref_string': edges['ref_string_id'].map(string_map),
+            {'src_string': map_to_strings(edges['src_node_id']),
+             'tgt_string': map_to_strings(edges['tgt_node_id']),
+             'ref_string': map_to_strings(edges['ref_node_id']),
              'link_type': edges['link_type_id'].map(lt_map),
              'date_inserted': edges['date_inserted'],
              'date_modified': edges['date_modified']},
@@ -466,17 +479,17 @@ class TextNet():
         )
 
         if node_types:
-            resolved['src_node_type'] = self.map_string_id_to_node_type(
-                edges['src_string_id']
-            )
-            resolved['tgt_node_type'] = self.map_string_id_to_node_type(
-                edges['tgt_string_id']
-            )
-            resolved['ref_node_type'] = self.map_string_id_to_node_type(
-                edges['ref_string_id']
-            )
+            resolved['src_node_type'] = self.get_node_types_by_node_id(
+                edges['src_node_id']
+            ).array
+            resolved['tgt_node_type'] = self.get_node_types_by_node_id(
+                edges['tgt_node_id']
+            ).array
+            resolved['ref_node_type'] = self.get_node_types_by_node_id(
+                edges['ref_node_id']
+            ).array
 
-        if tags is True:
+        if tags is True and not self.edge_tags.empty:
             # Resolve link tags as space-delimited lists
             tags = self.edge_tags.groupby('edge_id')
             tags = tags.apply(
@@ -484,7 +497,10 @@ class TextNet():
                 ' '.join(self.strings.loc[x['tag_string_id'], 'string'])
             )
 
-            resolved = resolved.join(tags.rename('tags'))
+            resolved = pd.concat(
+                [resolved, tags.rename('tags')],
+                axis='columns'
+            )
 
         return resolved.fillna(pd.NA)
 
