@@ -1,4 +1,3 @@
-from platform import node
 import bibliograph as bg
 import pandas as pd
 import shorthand as shnd
@@ -315,7 +314,7 @@ def _map_node_ids_for_single_link_constraint(
     link_types = constraint_row[1]
 
     # cache an empty return value
-    empty = pd.DataFrame(columns=['src_node_id', 0])
+    empty = pd.DataFrame(columns=['src_node_id', 'tgt_node_id'])
 
     node_type_syntax = entry_syntax[node_type]
     link_types = pd.Series(map(str.strip, link_types.split()))
@@ -353,6 +352,16 @@ def _map_node_ids_for_single_link_constraint(
         'src_string_id': 'src_node_id',
         'tgt_string_id': 'tgt_node_id'
     })
+
+    # Candidates can't have source or target nodes of null type
+    null_node_ids = tn.get_nodes_with_null_types().index
+    src_is_not_null = ~candidate_assertions['src_node_id'].isin(null_node_ids)
+    tgt_is_not_null = ~candidate_assertions['tgt_node_id'].isin(null_node_ids)
+    candidate_assertions = candidate_assertions.loc[
+        src_is_not_null & tgt_is_not_null,
+        :
+    ]
+
     # Nodes can only be targets relevant to the constraint if they
     # are targets of at least two different links in the pool of
     # candidate assertions
@@ -439,6 +448,26 @@ def _map_node_ids_for_single_link_constraint(
     return candidate_assertions.map(node_id_map).reset_index()
 
 
+def _get_strings_of_extreme_length(strings_frame, extremum_type):
+
+    if extremum_type == 'shortest':
+        keep = 'first'
+    elif extremum_type == 'longest':
+        keep = 'last'
+    else:
+        raise ValueError('Cannot parse extremum type')
+
+    node_id_subset = strings_frame['node_id'].value_counts()
+    node_id_subset = node_id_subset.loc[node_id_subset > 1].index
+    string_subset = strings_frame.query('node_id.isin(@node_id_subset)')
+
+    extreme_strings = string_subset.loc[
+        string_subset['string'].str.len().sort_values().index
+    ]
+
+    return extreme_strings.drop_duplicates(keep=keep, subset='node_id')
+
+
 def get_node_id_map_from_link_constraints(
     tn,
     link_constraints_string_id,
@@ -476,11 +505,14 @@ def get_node_id_map_from_link_constraints(
         ),
         axis='columns'
     )
+
     node_id_map = pd.concat(tuple(node_id_map))
+    node_id_map = node_id_map.rename(columns={0: 'tgt_node_id'})
     node_id_map = node_id_map.drop_duplicates()
+    node_id_map = node_id_map.query('src_node_id != tgt_node_id')
 
     return pd.Series(
-        node_id_map[0].array,
+        node_id_map['tgt_node_id'].array,
         index=node_id_map['src_node_id'].array
     )
 
@@ -542,13 +574,23 @@ def build_textnet_assertions(
 
     # create the node_types table
     tn.node_types = pd.DataFrame(
-        {'node_type': parsed.node_types.array, 'description': pd.NA}
+        {
+            'node_type': parsed.node_types.array,
+            'description': pd.NA,
+            'null_type': False
+        }
     )
+    na_node_type_id = tn.id_lookup('node_types', parsed.na_node_type)
+    tn.node_types.loc[na_node_type_id, 'null_type'] = True
     tn.reset_node_types_dtypes()
 
     # create the link_types table
     tn.link_types = pd.DataFrame(
-        {'link_type': parsed.link_types.array, 'description': pd.NA}
+        {
+            'link_type': parsed.link_types.array,
+            'description': pd.NA,
+            'null_type': False
+        }
     )
     tn.reset_link_types_dtypes()
 
@@ -636,7 +678,7 @@ def complete_textnet_from_assertions(
             aliased_node_id_map.index.get_level_values(0)
         )
 
-        string_subset = tn.strings.loc[aliased_node_id_map]
+        '''string_subset = tn.strings.loc[aliased_node_id_map]
 
         name_strings = pd.DataFrame(
             {
@@ -675,6 +717,22 @@ def complete_textnet_from_assertions(
                 'date_modified': pd.NA
             },
             index=name_strings.index
+        )'''
+
+        idx_of_name_strings = aliased_node_id_map.loc[
+            ~aliased_node_id_map.index.duplicated()
+        ]
+        name_strings = tn.strings.loc[idx_of_name_strings]
+
+        tn.nodes = pd.DataFrame(
+            {
+                'node_type_id': name_strings['node_type_id'].array,
+                'name_string_id': name_strings.index,
+                'abbr_string_id': name_strings.index,
+                'date_inserted': time_string,
+                'date_modified': pd.NA
+            },
+            index=idx_of_name_strings.index
         )
 
         tn.reset_nodes_dtypes()
@@ -696,7 +754,7 @@ def complete_textnet_from_assertions(
         new_nodes = shnd.util.normalize_types(new_nodes, tn.nodes)
         tn.nodes = pd.concat([tn.nodes, new_nodes])
 
-        tn.strings.loc[aliased_node_id_map, 'node_id'] = (
+        tn.strings.loc[aliased_node_id_map.array, 'node_id'] = (
             aliased_node_id_map.index.astype(tn.big_id_dtype)
         )
         tn.strings.loc[idx_of_strings_with_no_aliases, 'node_id'] = (
@@ -763,6 +821,19 @@ def complete_textnet_from_assertions(
         tn.strings.loc[to_map, 'node_id'] = mapped_values.array
 
         tn.reset_strings_dtypes()
+
+        tn.nodes = tn.nodes.loc[tn.nodes.index.isin(tn.strings['node_id']), :]
+
+    names = _get_strings_of_extreme_length(tn.strings, 'longest')
+    names = names.drop_duplicates(subset='node_id')
+
+    abbrs = _get_strings_of_extreme_length(tn.strings, 'shortest')
+    abbrs = abbrs.drop_duplicates(subset='node_id')
+
+    tn.nodes.loc[names['node_id'], 'name_string_id'] = names.index
+    tn.nodes.loc[abbrs['node_id'], 'abbr_string_id'] = abbrs.index
+
+    tn.reset_nodes_dtypes()
 
     def map_assert_str_to_nodes(label):
         return tn.assertions[label].map(tn.strings['node_id']).array
@@ -843,13 +914,13 @@ def textnet_from_parsed_shorthand(
             k: StringIO(v.to_csv(index=False)) for k, v in aliases.items()
         }
 
-    _insert_alias_assertions(
-        tn,
-        tn,
-        aliases_dict,
-        aliases_case_sensitive=False,
-        input_source_string_id=input_source_string_id
-    )
+        _insert_alias_assertions(
+            tn,
+            tn,
+            aliases_dict,
+            aliases_case_sensitive=False,
+            input_source_string_id=input_source_string_id
+        )
 
     if link_constraints_fname is not None:
 
@@ -868,11 +939,12 @@ def textnet_from_parsed_shorthand(
                 'date_modified': pd.NA
             })
             new_string = shnd.util.normalize_types(new_string, tn.strings)'''
+            time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             new_string = shnd.util.normalize_types(
                 {
                     'string': link_constraints_text,
                     'node_type_id': link_constraints_node_type_id,
-                    'date_inserted': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'date_inserted': time_string,
                     'date_modified': pd.NA
                 },
                 tn.strings
