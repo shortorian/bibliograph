@@ -88,13 +88,15 @@ class TextNet():
 
         self._node_types_dtypes = {
             'node_type': 'object',
-            'description': 'object'
+            'description': 'object',
+            'null_type': bool
         }
         self._node_types_index_dtype = self.small_id_dtype
 
         self._link_types_dtypes = {
             'link_type': 'object',
-            'description': 'object'
+            'description': 'object',
+            'null_type': bool
         }
         self._link_types_index_dtype = self.small_id_dtype
 
