@@ -176,6 +176,10 @@ class TextNet():
 
             return new_row.index[0]
 
+    def _get_null_type_ids(self, table_name):
+        table = self.__getattribute__(table_name)
+        return table.loc[table['null_type']].index
+
     def _reset_table_dtypes(self, table_name):
         table_dtypes = self.__getattr__('_{}_dtypes'.format(table_name))
         index_dtype = self.__getattr__('_{}_index_dtype'.format(table_name))
@@ -188,6 +192,12 @@ class TextNet():
         table = table.fillna(pd.NA)
 
         self.__setattr__(table_name, table)
+
+    def get_null_link_type_ids(self):
+        return self._get_null_type_ids('link_types')
+
+    def get_null_node_type_ids(self):
+        return self._get_null_type_ids('node_types')
 
     def insert_link_type(
         self,
