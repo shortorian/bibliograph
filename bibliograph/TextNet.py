@@ -222,6 +222,12 @@ class TextNet():
             self.node_types['node_type']
         )
 
+    def get_node_types_by_string_id(self, string_ids):
+        node_ids = self.strings.loc[string_ids, 'node_id']
+        return self.nodes.loc[node_ids, 'node_type_id'].map(
+            self.node_types['node_type']
+        )
+
     def insert_link_type(
         self,
         name,
