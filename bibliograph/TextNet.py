@@ -153,8 +153,6 @@ class TextNet():
 
         if name in existing_table[column_name].array:
 
-            
-
             if pd.notna(description) and overwrite_description:
                 existing_row = (existing_table[column_name] == name)
                 existing_table.loc[existing_row, 'description'] = description
