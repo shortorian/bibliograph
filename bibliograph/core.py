@@ -1,3 +1,4 @@
+from platform import node
 import bibliograph as bg
 import pandas as pd
 import shorthand as shnd
@@ -14,7 +15,8 @@ def _insert_alias_assertions(
     tn,
     parsed,
     aliases_dict,
-    aliases_case_sensitive
+    aliases_case_sensitive,
+    input_source_string_id
 ):
 
     time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -27,6 +29,7 @@ def _insert_alias_assertions(
         for k, v in aliases_dict.items()
         if k in tn.node_types['node_type'].array
     }
+    aliases_dict = {k: v.to_csv(index=False) for k, v in aliases.items()}
 
     # Get relevant aliases out of each set of aliases
     aliases = {
@@ -67,8 +70,7 @@ def _insert_alias_assertions(
 
     # Add a node type for alias reference strings and add the alias
     # reference strings to the new strings
-    tn.insert_node_type('alias_reference')
-    alias_ref_node_id = tn.id_lookup('node_types', 'alias_reference')
+    alias_ref_node_id = tn.insert_node_type('alias_reference')
     alias_ref_strings = pd.DataFrame({
         'string': aliases_dict.values(),
         'node_type_id': alias_ref_node_id,
@@ -154,32 +156,14 @@ def _insert_alias_assertions(
 
     new_assertions = pd.concat(new_assertions.values(), ignore_index=True)
 
-    # make a string value representing the current python function
-    frame = inspect.currentframe()
-    current_module = inspect.getframeinfo(frame).filename
-    current_module = Path(current_module).stem.split('.')[0]
-    current_function = inspect.getframeinfo(frame).function
-    inp_string = '.'.join(['bibliograph', current_module, current_function])
-
-    # Insert a strings row for the input string
-    new_string = {
-        'string': inp_string,
-        'node_type_id': tn.id_lookup('node_types', 'python_function'),
-        'date_inserted': time_string,
-        'date_modified': pd.NA
-    }
-    new_string = shnd.util.normalize_types(new_string, tn.strings)
-    tn.strings = pd.concat([tn.strings, new_string])
-
     # Add a link type for aliases if it doesn't already exist
-    tn.insert_link_type('alias')
-    alias_link_type_id = tn.id_lookup('link_types', 'alias')
+    alias_link_type_id = tn.insert_link_type('alias')
 
     # make a dataframe with the remaining data for the assertions
     # frame and then concat it with the partial assertions frame
     assertion_metadata = pd.DataFrame(
         {
-            'inp_string_id': tn.strings.index[-1],
+            'inp_string_id': input_source_string_id,
             'link_type_id': alias_link_type_id,
             'date_inserted': time_string,
             'date_modified': pd.NA
@@ -320,6 +304,187 @@ def _select_aliases(
             return aliases.loc[aliases['key'].isin(keys)]
 
 
+def _map_node_ids_for_single_link_constraint(
+    constraint_row,
+    tn,
+    entry_syntax,
+    entry_syntax_string_id
+):
+
+    node_type = constraint_row[0]
+    link_types = constraint_row[1]
+
+    # cache an empty return value
+    empty = pd.DataFrame(columns=['src_node_id', 0])
+
+    node_type_syntax = entry_syntax[node_type]
+    link_types = pd.Series(map(str.strip, link_types.split()))
+
+    if not link_types.isin(node_type_syntax['item_link_type']).all():
+        raise ValueError(
+            'Entry syntax at string ID {} does not define an '
+            'entry of node type "{}" with item links of type(s) {}.'
+            .format(entry_syntax_string_id, node_type, list(link_types))
+        )
+
+    # Get integer ID values for the link types mentioned in this
+    # constraint
+    link_type_ids = pd.Series(
+        [tn.id_lookup('link_types', lt) for lt in link_types]
+    )
+
+    # Candidates for assertions that meet this constraint must have
+    # the link types listed in the constraint
+    candidate_assertions = tn.assertions.loc[
+        tn.assertions['link_type_id'].isin(link_type_ids),
+        :
+    ]
+
+    # Get node IDs and link types of candidate assertions
+    candidate_assertions = pd.concat(
+        [
+            candidate_assertions['src_string_id'].map(tn.strings['node_id']),
+            candidate_assertions['tgt_string_id'].map(tn.strings['node_id']),
+            candidate_assertions['link_type_id']
+        ],
+        axis='columns'
+    )
+    candidate_assertions = candidate_assertions.rename(columns={
+        'src_string_id': 'src_node_id',
+        'tgt_string_id': 'tgt_node_id'
+    })
+    # Nodes can only be targets relevant to the constraint if they
+    # are targets of at least two different links in the pool of
+    # candidate assertions
+    possible_tgt_nodes = candidate_assertions['tgt_node_id'].value_counts()
+    possible_tgt_nodes = possible_tgt_nodes.loc[possible_tgt_nodes > 1]
+    candidate_assertions = candidate_assertions.query(
+        'tgt_node_id.isin(@possible_tgt_nodes.index)'
+    )
+
+    if candidate_assertions.empty:
+        return empty
+
+    # Nodes can only be sources that meet the constraint if they
+    # are sources for at least as many candidate assertions as there
+    # are link types mentioned in the constraint. This step is done
+    # to reduce the size of the series in the groupby operation
+    # below because (I think?) counting values in a large series is
+    # cheaper than doing Series.groupby().apply()
+    possible_src_nodes = candidate_assertions['src_node_id'].value_counts()
+    possible_src_nodes = possible_src_nodes.loc[
+        possible_src_nodes >= len(link_type_ids)
+    ]
+    candidate_assertions = candidate_assertions.query(
+        'src_node_id.isin(@possible_src_nodes.index)'
+    )
+
+    if candidate_assertions.empty:
+        return empty
+
+    # Nodes can only be sources that meet the constraint if they
+    # they are sources for at least one candidate assertion of each
+    # type listed in the constraint
+    possible_src_nodes = candidate_assertions.groupby(by='src_node_id')
+    possible_src_nodes = possible_src_nodes.apply(
+        lambda x: x.name
+        if link_type_ids.isin(x['link_type_id']).all()
+        else pd.NA
+    )
+    possible_src_nodes = possible_src_nodes.dropna()
+    candidate_assertions = candidate_assertions.query(
+        'src_node_id.isin(@possible_src_nodes.index)'
+    )
+
+    if candidate_assertions.empty:
+        return empty
+
+    candidate_assertions = candidate_assertions.groupby(
+        by=['link_type_id', 'tgt_node_id']
+    )
+    candidate_assertions = candidate_assertions.apply(
+        lambda x: tuple(x['src_node_id']) if len(x) > 1 else ()
+    )
+    candidate_assertions = candidate_assertions.dropna()
+
+    if candidate_assertions.empty:
+        return empty
+
+    candidate_assertions = candidate_assertions.loc[
+        candidate_assertions != ()
+    ]
+
+    if candidate_assertions.empty:
+        return empty
+
+    candidate_assertions = candidate_assertions.explode()
+    candidate_assertions = candidate_assertions.reset_index(
+        name='src_node_id'
+    )
+    candidate_assertions = candidate_assertions.groupby(by='src_node_id')
+    candidate_assertions = candidate_assertions.apply(
+        lambda x:
+        tuple(x['tgt_node_id'])
+        if link_type_ids.isin(x['link_type_id']).all()
+        else pd.NA
+    )
+
+    node_id_map = candidate_assertions.dropna().drop_duplicates()
+
+    if candidate_assertions.empty:
+        return empty
+
+    node_id_map = pd.Series(node_id_map.index, index=node_id_map.array)
+
+    return candidate_assertions.map(node_id_map).reset_index()
+
+
+def get_node_id_map_from_link_constraints(
+    tn,
+    link_constraints_string_id,
+    entry_syntax_string_id
+):
+
+    # The constraints are the full text of a CSV file stored in the
+    # strings frame, so they need to be read into a dataframe
+    constraints = pd.read_csv(
+        StringIO(tn.strings.loc[link_constraints_string_id, 'string']),
+        encoding='utf8'
+    )
+
+    # Read the entry syntax into a dataframe and make a dictionary for
+    # the definition of each node type mentioned in the constraints file
+    entry_syntax_node_id = tn.strings.loc[entry_syntax_string_id, 'node_id']
+    syntax_metadata = tn.shorthand_entry_syntax.query(
+        'node_id == @entry_syntax_node_id'
+    )
+    entry_syntax = shnd.syntax_parsing.validate_entry_syntax(
+        tn.strings.loc[entry_syntax_string_id, 'string'],
+        case_sensitive=syntax_metadata['case_sensitive'].squeeze()
+    )
+    entry_syntax = {
+        node_type: entry_syntax.query('entry_node_type == @node_type')
+        for node_type in entry_syntax['entry_node_type'].unique()
+    }
+
+    node_id_map = constraints.apply(
+        lambda x: _map_node_ids_for_single_link_constraint(
+            x,
+            tn,
+            entry_syntax,
+            entry_syntax_string_id
+        ),
+        axis='columns'
+    )
+    node_id_map = pd.concat(tuple(node_id_map))
+    node_id_map = node_id_map.drop_duplicates()
+
+    return pd.Series(
+        node_id_map[0].array,
+        index=node_id_map['src_node_id'].array
+    )
+
+
 def build_textnet_assertions(
     parsed,
     input_source_string,
@@ -343,7 +508,7 @@ def build_textnet_assertions(
 
         input_source_node_type_id = parsed.node_types.index[-1]
 
-    # Insert a strings row for the input filename
+    # Insert a strings row for the input string
     new_string = {
         'string': input_source_string,
         'node_type_id': input_source_node_type_id
@@ -396,7 +561,12 @@ def build_textnet_assertions(
     return tn
 
 
-def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
+def complete_textnet_from_assertions(
+    tn,
+    parsed,
+    aliases_case_sensitive,
+    link_constraints_string_id
+):
 
     time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
@@ -549,23 +719,6 @@ def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
 
     tn.reset_strings_dtypes()
 
-    def map_assert_str_to_nodes(label):
-        return tn.assertions[label].map(tn.strings['node_id']).array
-
-    tn.edges = pd.DataFrame({
-        'src_node_id': map_assert_str_to_nodes('src_string_id'),
-        'tgt_node_id': map_assert_str_to_nodes('tgt_string_id'),
-        'ref_node_id': map_assert_str_to_nodes('ref_string_id'),
-        'link_type_id': tn.assertions['link_type_id'].array,
-        'date_inserted': time_string,
-        'date_modified': pd.NA
-    })
-    tn.edges = tn.edges.drop_duplicates().reset_index(drop=True)
-
-    tn.reset_edges_dtypes()
-
-    tn.edge_tags = pd.DataFrame(columns=['edge_id', 'tag_string_id'])
-
     if 'shorthand_text' in parsed.node_types.array:
         text_node_type = 'shorthand_text'
     elif 'items_text' in parsed.node_types.array:
@@ -591,6 +744,43 @@ def complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive):
     if 'shorthand_link_syntax' in parsed.node_types.array:
         _make_syntax_metadata_table(tn, parsed, 'link')
 
+    if link_constraints_string_id is not None:
+
+        entry_syntax_node_id = tn.shorthand_entry_syntax['node_id'].iloc[0]
+        entry_syntax_string_id = tn.nodes.loc[
+            entry_syntax_node_id,
+            'name_string_id'
+        ]
+
+        node_id_map = get_node_id_map_from_link_constraints(
+            tn,
+            link_constraints_string_id=link_constraints_string_id,
+            entry_syntax_string_id=entry_syntax_string_id
+        )
+
+        to_map = tn.strings['node_id'].isin(node_id_map.index)
+        mapped_values = tn.strings.loc[to_map, 'node_id'].map(node_id_map)
+        tn.strings.loc[to_map, 'node_id'] = mapped_values.array
+
+        tn.reset_strings_dtypes()
+
+    def map_assert_str_to_nodes(label):
+        return tn.assertions[label].map(tn.strings['node_id']).array
+
+    tn.edges = pd.DataFrame({
+        'src_node_id': map_assert_str_to_nodes('src_string_id'),
+        'tgt_node_id': map_assert_str_to_nodes('tgt_string_id'),
+        'ref_node_id': map_assert_str_to_nodes('ref_string_id'),
+        'link_type_id': tn.assertions['link_type_id'].array,
+        'date_inserted': time_string,
+        'date_modified': pd.NA
+    })
+    tn.edges = tn.edges.drop_duplicates().reset_index(drop=True)
+
+    tn.reset_edges_dtypes()
+
+    tn.edge_tags = pd.DataFrame(columns=['edge_id', 'tag_string_id'])
+
     return tn
 
 
@@ -599,7 +789,9 @@ def textnet_from_parsed_shorthand(
     input_source_string,
     input_source_node_type,
     aliases_dict=None,
-    aliases_case_sensitive=True
+    aliases_case_sensitive=True,
+    automatic_aliasing=False,
+    link_constraints_fname=None
 ):
 
     tn = build_textnet_assertions(
@@ -608,80 +800,96 @@ def textnet_from_parsed_shorthand(
         input_source_node_type
     )
 
+    input_source_string_id = tn.strings.loc[
+        tn.strings['string'] == input_source_string
+    ]
+    input_source_string_id = input_source_string_id.index[0]
+
     if aliases_dict is not None:
         _insert_alias_assertions(
             tn,
             parsed,
             aliases_dict,
-            aliases_case_sensitive
+            aliases_case_sensitive,
+            input_source_string_id=input_source_string_id
         )
 
-    alias_generators = {
-        'actor': bg.alias_generators.western_surname_alias_generator_vector,
-        'identifier': bg.alias_generators.doi_alias_generator
-    }
-
-    strings = {
-        k: tn.select_strings_by_node_type(k) for k in alias_generators.keys()
-    }
-    aliases = {
-        k: alias_generators[k](v['string']) for k, v in dict(strings).items()
-    }
-
-    aliases = {
-        k: pd.DataFrame({
-            'string': v['string'].array,
-            'alias': aliases[k].array
-        })
-        for k, v in strings.items()
-    }
-
-    aliases = {k: v.dropna() for k, v in aliases.items()}
-
-    try:
-
-        alias_link_type = tn.id_lookup('link_types', 'alias')
-
-        existing_aliases = tn.assertions.query(
-            'link_type_id == @alias_link_type'
-        )
-        existing_aliases = pd.concat([
-            existing_aliases['src_string_id'].map(tn.strings['string']),
-            existing_aliases['tgt_string_id'].map(tn.strings['string'])
-        ])
-
-        '''string_already_aliased = {
-            k: v['string'].isin(existing_aliases) for k, v in aliases.items()
+    if automatic_aliasing:
+        alias_generators = {
+            'actor': bg.alias_generators.western_surname_alias_generator_vector,
+            'identifier': bg.alias_generators.doi_alias_generator
         }
-        alias_already_present = {
-            k: v['alias'].isin(existing_aliases) for k, v in aliases.items()
+
+        strings = {
+            k: tn.select_strings_by_node_type(k)
+            for k in alias_generators.keys()
         }
-        masks = {
+        aliases = {
+            k: alias_generators[k](v['string'])
+            for k, v in dict(strings).items()
+        }
+
+        aliases = {
             k: pd.DataFrame({
-                'string': string_already_aliased[k],
-                'alias': alias_already_present[k]
+                'string': v['string'].array,
+                'alias': aliases[k].array
             })
-            for k in aliases.keys()
+            for k, v in strings.items()
         }
 
-        aliases = {k: v.mask(masks[k]).dropna() for k, v in aliases.items()}'''
+        aliases = {k: v.dropna() for k, v in aliases.items()}
 
-    except KeyError:
-
-        pass
-
-    aliases_dict = {
-        k: StringIO(v.to_csv(index=False)) for k, v in aliases.items()
-    }
+        aliases_dict = {
+            k: StringIO(v.to_csv(index=False)) for k, v in aliases.items()
+        }
 
     _insert_alias_assertions(
         tn,
         tn,
         aliases_dict,
-        aliases_case_sensitive=False
+        aliases_case_sensitive=False,
+        input_source_string_id=input_source_string_id
     )
 
-    return complete_textnet_from_assertions(tn, parsed, aliases_case_sensitive)
+    if link_constraints_fname is not None:
+
+        link_constraints_node_type_id = tn.insert_node_type(
+            'link_constraints_text'
+        )
+
+        with open(link_constraints_fname, 'r', encoding='utf8') as f:
+            link_constraints_text = f.read()
+
+        if link_constraints_text not in tn.strings['string'].array:
+            '''new_string = pd.DataFrame({
+                'string': link_constraints_text,
+                'node_type_id': link_constraints_node_type_id,
+                'date_inserted': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'date_modified': pd.NA
+            })
+            new_string = shnd.util.normalize_types(new_string, tn.strings)'''
+            new_string = shnd.util.normalize_types(
+                {
+                    'string': link_constraints_text,
+                    'node_type_id': link_constraints_node_type_id,
+                    'date_inserted': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'date_modified': pd.NA
+                },
+                tn.strings
+            )
+            tn.strings = pd.concat([tn.strings, new_string])
+            link_constraints_string_id = new_string.index[0]
+
+    else:
+
+        link_constraints_string_id = None
+
+    return complete_textnet_from_assertions(
+        tn,
+        parsed,
+        aliases_case_sensitive,
+        link_constraints_string_id=link_constraints_string_id
+    )
 
 
 def slurp_bibtex(
@@ -691,8 +899,31 @@ def slurp_bibtex(
     allow_redundant_items=False,
     aliases_dict=None,
     aliases_case_sensitive=True,
+    automatic_aliasing=False,
+    link_constraints_fname=None,
     **kwargs
 ):
+
+    # make a string value representing the current function call
+    frame = inspect.currentframe()
+    current_module = inspect.getframeinfo(frame).filename
+    current_module = Path(current_module).stem.split('.')[0]
+    current_function = inspect.getframeinfo(frame).function
+    current_function = '.'.join(
+        ['bibliograph', current_module, current_function]
+    )
+
+    excluded_locals = [
+        'frame',
+        'current_module',
+        'current_function',
+        'excluded_locals',
+        'kwargs'
+    ]
+    args = {k: v for k, v in locals().items() if k not in excluded_locals}
+    args.update(kwargs)
+
+    input_source_string = '{}(**{})'.format(current_function, args)
 
     # initialize bibtex and shorthand parsers
     bibtex_parser = _bibtexparser(common_strings=True)
@@ -729,12 +960,19 @@ def slurp_bibtex(
             **kwargs
         )
 
+    if automatic_aliasing is True or aliases_dict is not None:
+        raise NotImplementedError(
+            'aliasing not yet implemented for bibtex import'
+        )
+
     tn = textnet_from_parsed_shorthand(
         parsed,
-        bibtex_fname,
-        'file_name',
+        input_source_string,
+        'python_function',
         aliases_dict,
-        aliases_case_sensitive
+        aliases_case_sensitive,
+        automatic_aliasing,
+        link_constraints_fname
     )
 
     return tn
@@ -748,8 +986,31 @@ def slurp_shorthand(
     allow_redundant_items=False,
     aliases_dict=None,
     aliases_case_sensitive=True,
+    automatic_aliasing=False,
+    link_constraints_fname=None,
     **kwargs
 ):
+
+    # make a string value representing the current function call
+    frame = inspect.currentframe()
+    current_module = inspect.getframeinfo(frame).filename
+    current_module = Path(current_module).stem.split('.')[0]
+    current_function = inspect.getframeinfo(frame).function
+    current_function = '.'.join(
+        ['bibliograph', current_module, current_function]
+    )
+
+    excluded_locals = [
+        'frame',
+        'current_module',
+        'current_function',
+        'excluded_locals',
+        'kwargs'
+    ]
+    args = {k: v for k, v in locals().items() if k not in excluded_locals}
+    args.update(kwargs)
+
+    input_source_string = '{}(**{})'.format(current_function, args)
 
     s = shnd.Shorthand(
         entry_syntax=entry_syntax_fname,
@@ -762,10 +1023,12 @@ def slurp_shorthand(
 
     tn = textnet_from_parsed_shorthand(
         parsed,
-        shorthand_fname,
-        'file_name',
+        input_source_string,
+        'python_function',
         aliases_dict,
-        aliases_case_sensitive
+        aliases_case_sensitive,
+        automatic_aliasing,
+        link_constraints_fname
     )
 
     return tn
