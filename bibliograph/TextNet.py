@@ -199,6 +199,14 @@ class TextNet():
     def get_null_node_type_ids(self):
         return self._get_null_type_ids('node_types')
 
+    def get_nodes_with_null_types(self):
+        null_type_ids = self.get_null_node_type_ids()
+        return self.nodes.loc[self.nodes['node_type_id'].isin(null_type_ids)]
+
+    def get_links_with_null_types(self):
+        null_type_ids = self.get_null_link_type_ids()
+        return self.links.loc[self.links['link_type_id'].isin(null_type_ids)]
+
     def insert_link_type(
         self,
         name,
