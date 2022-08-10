@@ -145,6 +145,7 @@ class TextNet():
         self,
         name,
         description,
+        null_type,
         node_or_link,
         overwrite_description
     ):
@@ -164,7 +165,11 @@ class TextNet():
 
         else:
 
-            new_row = {column_name: name, 'description': description}
+            new_row = {
+                column_name: name,
+                'description': description,
+                'null_type': bool(null_type)
+            }
             new_row = shnd.util.normalize_types(new_row, existing_table)
 
             self.__setattr__(table_name, pd.concat([existing_table, new_row]))
@@ -188,11 +193,13 @@ class TextNet():
         self,
         name,
         description=pd.NA,
+        null_type=False,
         overwrite_description=False
     ):
         return self._insert_type(
             name,
             description,
+            null_type,
             'link',
             overwrite_description
         )
@@ -201,11 +208,13 @@ class TextNet():
         self,
         name,
         description=pd.NA,
+        null_type=False,
         overwrite_description=False
     ):
         return self._insert_type(
             name,
             description,
+            null_type,
             'node',
             overwrite_description
         )
