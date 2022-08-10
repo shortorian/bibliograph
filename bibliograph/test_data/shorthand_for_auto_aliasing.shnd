@@ -2,6 +2,8 @@ left_entry, right_entry, link_tags_or_override, reference
 
 asmith_bwu__1999__bams__101__803__xxx,
     , Alice Smith_Elizabeth Wu__1998__bams__100__42__yyy
-asmith_bwu__2008__bams__110__1__zzz,
+    , some other person__1995__journal__1__1
+    , ack__margaret|lemone
+smitha_wub__2008__bams__110__1__zzz,
     , smitha_wub__1999__bams__101__803
-    , smitha_wub__1998__!__!__!__yyy
+    , smitha_wub__1998__!__!__!__doi:yyy
