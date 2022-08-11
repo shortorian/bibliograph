@@ -8,7 +8,7 @@ asmith_bwu__1999__bams__101__803__xxx,
     , Some Author__1989__t_Title With \#__x__x
     , fun__nasa__NASA|grant|12345-6789
     , ack__margaret|lemone_some|other|person
-    , org__nasa_university|of|chicago
+    , aff__nasa_university|of|chicago
     , "qte__super great quote, right?"__, p42
     , qte__This is the abstract of the article. We did stuff and also found things., abstract p17
     , not__this is an article I made up for testing__ some note tags

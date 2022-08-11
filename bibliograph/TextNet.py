@@ -1,5 +1,5 @@
+import bibliograph as bg
 import pandas as pd
-import shorthand as shnd
 
 
 class AssertionsNotFoundError(AttributeError):
@@ -177,7 +177,7 @@ class TextNet():
                 'description': description,
                 'null_type': bool(null_type)
             }
-            new_row = shnd.util.normalize_types(new_row, existing_table)
+            new_row = bg.util.normalize_types(new_row, existing_table)
 
             if node_or_link == 'node':
                 new_row['has_metadata'] = bool(has_metadata)
@@ -276,11 +276,11 @@ class TextNet():
                 "same type"
             )
 
-        metadata_table = {'node_id': node_id, 'node_type_id': node_type_id}
+        metadata_table = {'node_id': node_id[0], 'node_type_id': node_type_id}
         metadata_table.update(metadata)
 
         metadata_table = {
-            k: (v if v is not None else pd.NA)
+            k: ([v] if v is not None else pd.NA)
             for k, v in metadata_table.items()
         }
 
@@ -591,7 +591,7 @@ class TextNet():
     def select_strings_by_node_type(self, node_type):
 
         # if node_type is list-like, get the set
-        if shnd.util.iterable_not_string(node_type):
+        if bg.util.iterable_not_string(node_type):
 
             node_type_id = [
                 self.id_lookup('node_types', nt) for nt in node_type
