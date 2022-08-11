@@ -268,6 +268,9 @@ class TextNet():
             node_type,
             column_label='node_type'
         )
+
+        if self.nodes is not None:
+
         node_id = self.nodes.query('node_type_id == @node_type_id').index
 
         if len(node_id) > 1:
@@ -286,7 +289,7 @@ class TextNet():
 
         self.node_metadata_tables[node_type] = pd.DataFrame(
             metadata_table,
-            index=pd.Index([0], dtype=self.big_id_dtype)
+            index=pd.Index([0], dtype=self.small_id_dtype)
         )
 
         self.node_types.loc[node_type_id, 'has_metadata'] = True
