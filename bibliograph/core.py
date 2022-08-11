@@ -616,7 +616,7 @@ def build_textnet_assertions(
             'ParsedShorthand.node_types. Must be one of {}'
             .format(full_text_node_types)
         )
-    
+
     text_node_type = full_text_types_present.squeeze()
 
     text_metadata = {
@@ -949,6 +949,63 @@ def textnet_from_parsed_shorthand(
     else:
 
         link_constraints_string_id = None
+
+    entry_syntax_metadata = tn.shorthand_entry_syntax.squeeze()
+
+    if entry_syntax_metadata['allow_redundant_items']:
+
+        entry_syntax = tn.strings.loc[
+            entry_syntax_metadata['string_id'],
+            'string'
+        ]
+        entry_syntax = bg.syntax_parsing.validate_entry_syntax(
+            entry_syntax,
+            case_sensitive=entry_syntax_metadata['case_sensitive'],
+            allow_redundant_items=True
+        )
+
+        duplicate_link_types = entry_syntax['item_link_type'].loc[
+            entry_syntax[['item_node_type', 'item_link_type']].duplicated()
+        ]
+        duplicate_link_type_ids = [
+            tn.id_lookup('link_types', lt) for lt in duplicate_link_types
+        ]
+
+        full_text_metadata = {
+            k: v for k, v in tn.node_metadata_tables.items()
+            if k.endswith('_text')
+        }
+
+        if len(full_text_metadata) > 1:
+            raise ValueError(
+                'Found multiple full text node types. Can only process'
+                'one input text at a time'
+            )
+        else:
+            full_text_metadata = full_text_metadata.popitem()[1]
+
+        default_na_string_value = full_text_metadata['na_string_values']
+        default_na_string_value = default_na_string_value.squeeze()[0]
+        default_na_string_id = tn.id_lookup('strings', default_na_string_value)
+
+        na_node_type = full_text_metadata['na_node_type'].squeeze()
+        na_node_type_id = tn.id_lookup('node_types', na_node_type)
+
+        assertion_subset = tn.assertions.query(
+            'tgt_string_id == @default_na_string_id'
+        )
+        assertion_subset = assertion_subset.query(
+            'link_type_id.isin(@duplicate_link_type_ids)'
+        )
+        print(assertion_subset)
+        column_subset = ['src_string_id', 'tgt_string_id', 'link_type_id']
+        assertions_to_keep = assertion_subset[column_subset].duplicated(
+            keep='first'
+        )
+
+        drop_assertion_ids = assertion_subset.loc[~assertions_to_keep].index
+
+        tn.assertions = tn.assertions.drop(drop_assertion_ids)
 
     return complete_textnet_from_assertions(
         tn,
