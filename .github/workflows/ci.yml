@@ -19,7 +19,6 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install git+https://github.com/shortorian/shorthand.git
           pip install -r bibliograph/test_data/requirements.txt
       - name: Run tests with pytest
         run: pytest bibliograph/tests.py
