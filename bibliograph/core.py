@@ -600,6 +600,40 @@ def build_textnet_assertions(
     )
     tn.reset_assertion_tags_dtypes()
 
+    full_text_node_types = pd.Series(['shorthand_text', 'items_text'])
+    full_text_types_present = full_text_node_types.loc[
+        full_text_node_types.isin(parsed.node_types)
+    ]
+
+    if len(full_text_types_present) > 1:
+        raise ValueError(
+            'Found multiple full text node types. Can only process one '
+            'input text at a time'
+        )
+    elif full_text_types_present.empty:
+        raise ValueError(
+            'Could not find valid full text type in '
+            'ParsedShorthand.node_types. Must be one of {}'
+            .format(full_text_node_types)
+        )
+    
+    text_node_type = full_text_types_present.squeeze()
+
+    text_metadata = {
+        'space_char': parsed.space_char,
+        'na_string_values': parsed.na_string_values,
+        'na_node_type': parsed.na_node_type,
+        'item_separator': parsed.item_separator,
+        'default_entry_prefix': parsed.default_entry_prefix
+    }
+
+    tn.insert_metadata_table(text_node_type, text_metadata)
+
+    _make_syntax_metadata_table(tn, parsed, 'entry')
+
+    if 'shorthand_link_syntax' in parsed.node_types.array:
+        _make_syntax_metadata_table(tn, parsed, 'link')
+
     return tn
 
 
@@ -679,47 +713,6 @@ def complete_textnet_from_assertions(
             aliased_node_id_map.index.get_level_values(0)
         )
 
-        '''string_subset = tn.strings.loc[aliased_node_id_map]
-
-        name_strings = pd.DataFrame(
-            {
-                'node_id': aliased_node_id_map.index,
-                'string': string_subset['string'].array,
-                'string_id': string_subset.index,
-                'node_type_id': string_subset['node_type_id'].array
-            },
-            index=aliased_node_id_map.index
-        )
-        name_strings = name_strings.loc[
-            name_strings['string'].str.len().sort_values().index
-        ]
-        name_strings = name_strings.drop_duplicates(
-            keep='last', subset='node_id'
-        )
-        name_strings = name_strings.sort_values(by='node_id')
-
-        abbr_strings = pd.DataFrame({
-            'node_id': aliased_node_id_map.index,
-            'string': string_subset['string'].array,
-            'string_id': string_subset.index
-        })
-        abbr_strings = abbr_strings.loc[
-            abbr_strings['string'].str.len().sort_values().index
-        ]
-        abbr_strings = abbr_strings.drop_duplicates(subset='node_id')
-        abbr_strings = abbr_strings.sort_values(by='node_id')
-
-        tn.nodes = pd.DataFrame(
-            {
-                'node_type_id': name_strings['node_type_id'].array,
-                'name_string_id': name_strings['string_id'].array,
-                'abbr_string_id': abbr_strings['string_id'].array,
-                'date_inserted': time_string,
-                'date_modified': pd.NA
-            },
-            index=name_strings.index
-        )'''
-
         idx_of_name_strings = aliased_node_id_map.loc[
             ~aliased_node_id_map.index.duplicated()
         ]
@@ -778,31 +771,15 @@ def complete_textnet_from_assertions(
 
     tn.reset_strings_dtypes()
 
-    if 'shorthand_text' in parsed.node_types.array:
-        text_node_type = 'shorthand_text'
-    elif 'items_text' in parsed.node_types.array:
-        text_node_type = 'items_text'
-    else:
-        raise ValueError(
-            'Unrecognized input full text type.\nNone of '
-            '["shorthand_text", "items_text"] in parsed shorthand node '
-            'types.\n'
-        )
-
-    text_metadata = {
-        'space_char': parsed.space_char,
-        'na_string_values': parsed.na_string_values,
-        'na_node_type': parsed.na_node_type,
-        'item_separator': parsed.item_separator,
-        'default_entry_prefix': parsed.default_entry_prefix
-    }
-
-    tn.insert_metadata_table(text_node_type, text_metadata)
-
-    _make_syntax_metadata_table(tn, parsed, 'entry')
-
-    if 'shorthand_link_syntax' in parsed.node_types.array:
-        _make_syntax_metadata_table(tn, parsed, 'link')
+    for name, table in tn.node_metadata_tables.items():
+        if 'string_id' in table.columns:
+            node_ids = table['string_id'].map(tn.strings['node_id'])
+            table = table.drop('string_id', axis='columns')
+            table = pd.concat(
+                [node_ids.rename('node_id'), table],
+                axis='columns'
+            )
+            tn.node_metadata_tables[name] = table
 
     if link_constraints_string_id is not None:
 
