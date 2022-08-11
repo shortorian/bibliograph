@@ -271,15 +271,42 @@ class TextNet():
 
         if self.nodes is not None:
 
-        node_id = self.nodes.query('node_type_id == @node_type_id').index
+            node_id = self.nodes.query('node_type_id == @node_type_id').index
 
-        if len(node_id) > 1:
-            raise NotImplementedError(
-                "Can't handle metadata for multiple nodes of the "
-                "same type"
+            if len(node_id) > 1:
+                raise NotImplementedError(
+                    "Can't handle metadata for multiple nodes of the "
+                    "same type"
+                )
+
+            metadata_table = {
+                'node_id': node_id[0],
+                'node_type_id': node_type_id
+            }
+        
+        elif self.strings is not None:
+
+            string_id = self.strings.query('node_type_id == @node_type_id')
+            string_id = string_id.index
+
+            if len(string_id) > 1:
+                raise NotImplementedError(
+                    "Can't handle metadata for multiple nodes of the "
+                    "same type"
+                )
+
+            metadata_table = {
+                'string_id': string_id[0],
+                'node_type_id': node_type_id
+            }
+
+        else:
+
+            raise ValueError(
+                'Cannot insert a metadata table. TextNet.nodes and '
+                'TextNet.strings are both None.'
             )
 
-        metadata_table = {'node_id': node_id[0], 'node_type_id': node_type_id}
         metadata_table.update(metadata)
 
         metadata_table = {
