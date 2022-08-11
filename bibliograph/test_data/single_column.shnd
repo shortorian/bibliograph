@@ -1,0 +1,7 @@
+left_entry, right_entry, link_tags_or_override, reference
+asmith_bwu__1999__bams__101__803__xxx,
+asmith_bwu__1998__bams__100__42__yyy,
+bjones__1975__jats__90__1__ bjones1975_is_tagged with some_stuff,
+bwu__1989__t_long|title__x__80,
+Some Author__1989__t_A Title With \#__x__x,
+asmith_bwu__2008__bams__110__1__zzz             # an inline comment
