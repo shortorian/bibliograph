@@ -577,7 +577,8 @@ def build_textnet_assertions(
         {
             'node_type': parsed.node_types.array,
             'description': pd.NA,
-            'null_type': False
+            'null_type': False,
+            'has_metadata': False
         }
     )
     na_node_type_id = tn.id_lookup('node_types', parsed.na_node_type)
