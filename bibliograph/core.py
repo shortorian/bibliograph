@@ -1,6 +1,5 @@
 import bibliograph as bg
 import pandas as pd
-import shorthand as shnd
 import inspect
 from bibtexparser import dumps as _dump_bibtex_string
 from bibtexparser.bibdatabase import BibDatabase as _bibtex_db
@@ -85,7 +84,7 @@ def _insert_alias_assertions(
     ]
 
     # Insert the new strings in tn.strings
-    new_strings = shnd.util.normalize_types(new_strings, tn.strings)
+    new_strings = bg.util.normalize_types(new_strings, tn.strings)
     tn.strings = pd.concat([tn.strings, new_strings])
 
     # make maps between string values and integer IDs relevant to each
@@ -177,7 +176,7 @@ def _insert_alias_assertions(
     # put the new assertions columns in the right order and then
     # add them to the textnet assertions
     new_assertions = new_assertions[tn.assertions.columns]
-    new_assertions = shnd.util.normalize_types(
+    new_assertions = bg.util.normalize_types(
         new_assertions,
         tn.assertions
     )
@@ -487,7 +486,7 @@ def get_node_id_map_from_link_constraints(
     syntax_metadata = tn.shorthand_entry_syntax.query(
         'node_id == @entry_syntax_node_id'
     )
-    entry_syntax = shnd.syntax_parsing.validate_entry_syntax(
+    entry_syntax = bg.syntax_parsing.validate_entry_syntax(
         tn.strings.loc[entry_syntax_string_id, 'string'],
         case_sensitive=syntax_metadata['case_sensitive'].squeeze()
     )
@@ -532,7 +531,7 @@ def build_textnet_assertions(
 
     except KeyError:
 
-        new_node_type = shnd.util.normalize_types(
+        new_node_type = bg.util.normalize_types(
             pd.Series([input_source_node_type]),
             parsed.node_types
         )
@@ -545,7 +544,7 @@ def build_textnet_assertions(
         'string': input_source_string,
         'node_type_id': input_source_node_type_id
     }
-    new_string = shnd.util.normalize_types(new_string, parsed.strings)
+    new_string = bg.util.normalize_types(new_string, parsed.strings)
     parsed.strings = pd.concat([parsed.strings, new_string])
 
     # create a TextNet and cache a string for the insertion dates
@@ -753,7 +752,7 @@ def complete_textnet_from_assertions(
             'date_inserted': time_string,
             'date_modified': pd.NA
         })
-        new_nodes = shnd.util.normalize_types(new_nodes, tn.nodes)
+        new_nodes = bg.util.normalize_types(new_nodes, tn.nodes)
         tn.nodes = pd.concat([tn.nodes, new_nodes])
 
         tn.strings.loc[aliased_node_id_map.array, 'node_id'] = (
@@ -956,9 +955,9 @@ def textnet_from_parsed_shorthand(
                 'date_inserted': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 'date_modified': pd.NA
             })
-            new_string = shnd.util.normalize_types(new_string, tn.strings)'''
+            new_string = bg.util.normalize_types(new_string, tn.strings)'''
             time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            new_string = shnd.util.normalize_types(
+            new_string = bg.util.normalize_types(
                 {
                     'string': link_constraints_text,
                     'node_type_id': link_constraints_node_type_id,
@@ -1019,7 +1018,7 @@ def slurp_bibtex(
 
     # initialize bibtex and shorthand parsers
     bibtex_parser = _bibtexparser(common_strings=True)
-    s = shnd.Shorthand(
+    s = bg.Shorthand(
         entry_syntax=entry_syntax_fname,
         syntax_case_sensitive=syntax_case_sensitive,
         allow_redundant_items=allow_redundant_items
@@ -1101,7 +1100,7 @@ def slurp_shorthand(
 
     input_source_string = '{}(**{})'.format(current_function, args)
 
-    s = shnd.Shorthand(
+    s = bg.Shorthand(
         entry_syntax=entry_syntax_fname,
         link_syntax=link_syntax_fname,
         syntax_case_sensitive=syntax_case_sensitive,
