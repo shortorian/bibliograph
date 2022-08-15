@@ -395,9 +395,9 @@ def _validate_link_syntax(link_syntax, entry_syntax, case_sensitive):
 def parse_link_syntax(
     filepath_or_text,
     entry_syntax,
-    entry_prefix_id_map,
-    link_types,
-    item_label_id_map,
+    entry_prefix_id_map=None,
+    link_types=None,
+    item_label_id_map=None,
     case_sensitive=True
 ):
 
@@ -407,43 +407,52 @@ def parse_link_syntax(
         case_sensitive
     )
 
-    # Select links with entry prefix pairs that exist in this data set
     prefix_cols = ['left_entry_prefix', 'right_entry_prefix']
 
-    prefix_is_present = link_syntax[prefix_cols].isin(
-        entry_prefix_id_map.index
-    )
+    if entry_prefix_id_map is not None:
 
-    prefix_is_present = prefix_is_present.all(axis=1)
-    link_syntax = link_syntax.loc[prefix_is_present]
+        # Select links with entry prefix pairs that exist in this data
+        # set
+        prefix_is_present = link_syntax[prefix_cols].isin(
+            entry_prefix_id_map.index
+        )
 
-    # map entry prefixes from strings to integers and rename columns
-    link_syntax[prefix_cols] = link_syntax[prefix_cols].apply(
-        lambda x: x.map(entry_prefix_id_map)
-    )
-    link_syntax = link_syntax.rename(
-        columns={
-            'left_entry_prefix': 'left_entry_prefix_id',
-            'right_entry_prefix': 'right_entry_prefix_id'
-        }
-    )
+        prefix_is_present = prefix_is_present.all(axis=1)
+        link_syntax = link_syntax.loc[prefix_is_present]
 
-    # Get any new link types in the link syntax
-    new_link_types = _extend_id_map(
-        link_syntax['link_type'],
-        link_types,
-        dtype=link_types.index.dtype
-    )
-    new_link_types = pd.Series(new_link_types.index, index=new_link_types)
+        # map entry prefixes from strings to integers and rename columns
+        link_syntax[prefix_cols] = link_syntax[prefix_cols].apply(
+            lambda x: x.map(entry_prefix_id_map)
+        )
+        link_syntax = link_syntax.rename(
+            columns={
+                'left_entry_prefix': 'left_entry_prefix_id',
+                'right_entry_prefix': 'right_entry_prefix_id'
+            }
+        )
 
-    # Add new link types
-    link_types = pd.concat([link_types, new_link_types])
+    if link_types is None:
 
-    # Map the link types from strings to integers
-    link_syntax['link_type_id'] = link_syntax['link_type'].map(
-        pd.Series(link_types.index, index=link_types.array)
-    )
-    link_syntax = link_syntax.drop('link_type', axis=1)
+        link_types = link_syntax['link_type']
+
+    else:
+
+        # Get any new link types in the link syntax
+        new_link_types = _extend_id_map(
+            link_syntax['link_type'],
+            link_types,
+            dtype=link_types.index.dtype
+        )
+        new_link_types = pd.Series(new_link_types.index, index=new_link_types)
+
+        # Add new link types
+        link_types = pd.concat([link_types, new_link_types])
+
+        # Map the link types from strings to integers
+        link_syntax['link_type_id'] = link_syntax['link_type'].map(
+            pd.Series(link_types.index, index=link_types.array)
+        )
+        link_syntax = link_syntax.drop('link_type', axis=1)
 
     # Links in the synthesized shorthand data are a relation between
     # four entities represented by integer IDs:
@@ -484,12 +493,14 @@ def parse_link_syntax(
         link_syntax[component_prefix + 'item_label'] = item_label
         link_syntax = link_syntax.drop(column, axis=1)
 
-    # Map item labels to integers
-    item_label_cols = [
-        col for col in link_syntax.columns if 'item_label' in col
-    ]
-    link_syntax[item_label_cols] = link_syntax[item_label_cols].apply(
-        lambda x: x.map(item_label_id_map)
-    )
+    if item_label_id_map is not None:
+
+        # Map item labels to integers
+        item_label_cols = [
+            col for col in link_syntax.columns if 'item_label' in col
+        ]
+        link_syntax[item_label_cols] = link_syntax[item_label_cols].apply(
+            lambda x: x.map(item_label_id_map)
+        )
 
     return link_types, link_syntax
