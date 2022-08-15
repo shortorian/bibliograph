@@ -426,7 +426,7 @@ class TextNet():
     def reset_edge_tags_dtypes(self):
         self._reset_table_dtypes('edge_tags')
 
-    def resolve_assertions(self, node_types=True, tags=True):
+    def resolve_assertions(self, node_types=True, tags=True, subset=None):
         '''
         Get a copy of the assertions frame with all integer ID elements
         replaced by the string values they represent
@@ -449,6 +449,9 @@ class TextNet():
         assertions = self.assertions
         string_map = self.strings['string']
         lt_map = self.link_types['link_type']
+
+        if subset is not None:
+            assertions = assertions.loc[subset]
 
         resolved = pd.DataFrame(
             {'inp_string': assertions['inp_string_id'].map(string_map),
