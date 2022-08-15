@@ -283,7 +283,7 @@ class TextNet():
                 'node_id': node_id[0],
                 'node_type_id': node_type_id
             }
-        
+
         elif self.strings is not None:
 
             string_id = self.strings.query('node_type_id == @node_type_id')
