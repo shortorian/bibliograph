@@ -203,6 +203,47 @@ class TextNet():
 
         self.__setattr__(table_name, table)
 
+    def get_assertions_by_node_type(self, node_type, component, subset=None):
+
+        node_type_id = self.id_lookup('node_types', node_type)
+        if not component.endswith('_string_id'):
+            component = component + '_string_id'
+
+        if self.nodes is None:
+
+            string_subset = self.strings.query('node_type_id == @node_type_id')
+
+        else:
+
+            node_subset = self.nodes.query('node_type_id == @node_type_id')
+            string_subset = self.strings.query(
+                'node_id.isin(@node_subset.index)'
+            )
+
+        if subset is None:
+
+            return self.assertions.query(
+                '{}.isin(@string_subset.index)'.format(component)
+            )
+
+        else:
+
+            return self.assertions.loc[subset].query(
+                '{}.isin(@string_subset.index)'.format(component)
+            )
+
+    def get_assertions_by_inp_node_type(self, node_type, subset):
+        return self.get_assertions_by_node_type(node_type, 'inp', subset)
+
+    def get_assertions_by_src_node_type(self, node_type, subset):
+        return self.get_assertions_by_node_type(node_type, 'src', subset)
+
+    def get_assertions_by_tgt_node_type(self, node_type, subset):
+        return self.get_assertions_by_node_type(node_type, 'tgt', subset)
+
+    def get_assertions_by_ref_node_type(self, node_type, subset):
+        return self.get_assertions_by_node_type(node_type, 'ref', subset)
+
     def get_null_link_type_ids(self):
         return self._get_null_type_ids('link_types')
 
