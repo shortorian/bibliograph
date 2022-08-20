@@ -244,6 +244,177 @@ class TextNet():
     def get_assertions_by_ref_node_type(self, node_type, subset):
         return self.get_assertions_by_node_type(node_type, 'ref', subset)
 
+    def get_link_syntaxes(
+        self,
+        relevant_link_types=None,
+        edge_subset=None,
+        include_references=False
+    ):
+
+        if include_references:
+            id_categories = ['src', 'tgt', 'ref']
+
+        else:
+            id_categories = ['src', 'tgt']
+
+        if relevant_link_types is not None:
+            link_type_ids = [
+                self.id_lookup('link_types', t) for t in relevant_link_types
+                if t in self.link_types['link_type'].array
+            ]
+            edge_subset = self.edges.query('link_type_id.isin(@link_type_ids)')
+            edge_subset = edge_subset.index
+
+        if edge_subset is not None:
+            edge_subset = self.edges.loc[edge_subset].query(
+                'link_type_id.isin(@link_type_ids)'
+            )
+            edge_subset = edge_subset.index
+        else:
+            edge_subset = self.edges.index
+        '''    q = 'node_id.isin(@edge_subset["{}_node_id"])'
+
+            strings = {
+                k: self.strings.query(q.format(k)) for k in id_categories
+            }
+
+        else:
+            q = 'node_id.isin(@self.edges["{}_node_id"])'
+            strings = {
+                k: self.strings.query(q.format(k)) for k in id_categories
+            }'''
+
+        strings = self.strings.loc[self.strings['node_id'].isin(edge_subset)]
+        q = 'node_id.isin(@self.edges["{}_node_id"])'
+        strings = {
+            k: self.strings.query(q.format(k)) for k in id_categories
+        }
+
+        assertion_selector = [
+            self.assertions['{}_string_id'.format(k)].isin(v.index)
+            for k, v in strings.items()
+        ]
+        assertion_selector = pd.concat(assertion_selector, axis='columns').all(axis=1)
+
+        selected_assertions = self.assertions.loc[assertion_selector]
+
+        has_relevant_input_string = self.assertions['inp_string_id'].isin(
+            selected_assertions['inp_string_id']
+        )
+
+        assertions_to_link_syntax = self.get_assertions_by_tgt_node_type(
+            'shorthand_link_syntax',
+            subset=has_relevant_input_string
+        )
+        assertions_to_entry_syntax = self.get_assertions_by_tgt_node_type(
+            'shorthand_entry_syntax',
+            subset=has_relevant_input_string
+        )
+
+        missing_entry_sntx = ~assertions_to_link_syntax['inp_string_id'].isin(
+            assertions_to_entry_syntax['inp_string_id']
+        )
+        if missing_entry_sntx.any():
+            raise ValueError(
+                'Cannot parse link syntax without associated entry syntax'
+            )
+
+        assertions_to_link_syntax = assertions_to_link_syntax.sort_values(
+            by='inp_string_id'
+        )
+        assertions_to_entry_syntax = assertions_to_entry_syntax.sort_values(
+            by='inp_string_id'
+        )
+
+        link_syntax_metadata = self.get_node_metadata_by_string_id(
+            assertions_to_link_syntax['tgt_string_id']
+        )
+        entry_syntax_metadata = self.get_node_metadata_by_string_id(
+            assertions_to_entry_syntax['tgt_string_id']
+        )
+
+        entry_syntaxes = [
+            self.strings.loc[str_id, 'string']
+            for str_id in assertions_to_entry_syntax['tgt_string_id']
+        ]
+        link_syntaxes = [
+            self.strings.loc[str_id, 'string']
+            for str_id in assertions_to_link_syntax['tgt_string_id']
+        ]
+
+        link_syntaxes = [
+            bg.syntax_parsing.parse_link_syntax(
+                ls,
+                entry_syntaxes[i],
+                case_sensitive=link_syntax_metadata.iloc[i]['case_sensitive'].squeeze()
+            )
+            for i, ls in enumerate(link_syntaxes)
+        ]
+
+        entry_syntaxes = [
+            bg.syntax_parsing.validate_entry_syntax(
+                s,
+                case_sensitive=entry_syntax_metadata.iloc[i]['case_sensitive'].squeeze()
+            )
+            for i, s in enumerate(entry_syntaxes)
+        ]
+
+        syntaxes = pd.DataFrame({
+            'link_syntax': [item[1] for item in link_syntaxes],
+            'link_types': [item[0] for item in link_syntaxes],
+            'entry_syntax': entry_syntaxes,
+            'inp_string_id': assertions_to_link_syntax['inp_string_id'].array
+        })
+
+        return syntaxes
+
+    def get_node_metadata_by_string_id(self, string_id):
+
+        string_subset = self.strings.loc[string_id, 'node_id']
+
+        node_types = self.get_node_types_by_node_id(string_subset)
+        node_types_with_metadata = self.node_types.loc[
+            self.node_types['has_metadata']
+        ]
+        selection_has_metadata = node_types.isin(
+            node_types_with_metadata['node_type']
+        )
+        selection_has_metadata = selection_has_metadata.array
+
+        node_ids = pd.DataFrame({
+            'node_id': string_subset.loc[selection_has_metadata].array,
+            'node_type': node_types.loc[selection_has_metadata].array
+        })
+
+        node_metadata = node_ids.apply(
+            lambda x: self.__getattr__(x['node_type']).query(
+                'node_id == @x["node_id"]'
+            ),
+            axis='columns'
+        )
+        #node_metadata = node_metadata.reset_index(drop=True)
+
+        '''string_ids = pd.Series(string_subset.loc[selection_has_metadata].index)
+
+        node_metadata = pd.concat(
+            [node_metadata, string_ids.rename('string_id')],
+            axis='columns',
+            ignore_index=True
+        )
+
+        return node_metadata.apply(
+            lambda x: pd.concat(
+                [x[0], pd.Series(x[1], name='string_id')],
+                axis='columns'
+            ),
+            axis='columns'
+        )'''
+
+        output = pd.Series(pd.NA, index=string_subset.index)
+        output.loc[selection_has_metadata] = node_metadata.array
+
+        return output
+
     def get_null_link_type_ids(self):
         return self._get_null_type_ids('link_types')
 
