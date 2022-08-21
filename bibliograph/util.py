@@ -547,9 +547,20 @@ def get_new_typed_values(
         the set of existing values or which are present but have a
         different type in the set of existing values
     '''
+
+    value_label_is_container = iterable_not_string(value_column_label)
+    type_label_is_container = iterable_not_string(type_column_label)
+
     if 'columns' in dir(candidate_values):
 
-        cols = [value_column_label, type_column_label]
+        if not value_label_is_container:
+            value_column_label = [value_column_label]
+        
+        if not type_label_is_container:
+            type_column_label = [type_column_label]
+
+        else:
+            cols = [*value_column_label, *type_column_label]
 
         hashed_candidates = pd.util.hash_pandas_object(
             candidate_values[cols],
@@ -565,6 +576,12 @@ def get_new_typed_values(
     elif candidate_type is None:
         raise ValueError(
             'Must provide candidate type for one dimensional candidates'
+        )
+    
+    elif value_label_is_container or type_label_is_container:
+        raise ValueError(
+            'Must provide string-valued value column and type column '
+            'labels for one dimensional candidates'
         )
 
     else:
@@ -763,3 +780,6 @@ def set_string_dtype(df):
             )
         )
     )
+
+
+def 
