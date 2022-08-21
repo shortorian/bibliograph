@@ -591,6 +591,7 @@ def get_new_typed_values(
 
         return candidate_is_new_value
 
+
 def missing_integers(input_values, rng=None):
     '''
     Creates a set of integers in a target range that does
