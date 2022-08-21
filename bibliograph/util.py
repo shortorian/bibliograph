@@ -513,7 +513,7 @@ def get_new_typed_values(
     existing_values,
     value_column_label,
     type_column_label,
-    candidate_type
+    candidate_type=None
 ):
     '''
     Selects values out of a Series of candidate values if the values are
@@ -547,22 +547,49 @@ def get_new_typed_values(
         the set of existing values or which are present but have a
         different type in the set of existing values
     '''
-    candidate_already_exists = existing_values[value_column_label].isin(
-        candidate_values
-    )
-    wrong_type = existing_values[type_column_label] != candidate_type
-    candidate_exists_wrong_type = candidate_already_exists & wrong_type
+    if 'columns' in dir(candidate_values):
 
-    candidate_is_new_type = candidate_values.isin(
-        existing_values.loc[candidate_exists_wrong_type, value_column_label]
-    )
+        cols = [value_column_label, type_column_label]
 
-    candidate_is_new_value = ~candidate_values.isin(
-        existing_values[value_column_label]
-    )
+        hashed_candidates = pd.util.hash_pandas_object(
+            candidate_values[cols],
+            index=False
+        )
+        existing_values = pd.util.hash_pandas_object(
+            existing_values[cols],
+            index=False
+        )
 
-    return candidate_values.loc[candidate_is_new_type | candidate_is_new_value]
+        return candidate_values.loc[~hashed_candidates.isin(existing_values)]
 
+    elif candidate_type is None:
+        raise ValueError(
+            'Must provide candidate type for one dimensional candidates'
+        )
+
+    else:
+        candidate_already_exists = existing_values[value_column_label].isin(
+            candidate_values
+        )
+        wrong_type = existing_values[type_column_label] != candidate_type
+        candidate_exists_wrong_type = candidate_already_exists & wrong_type
+
+        candidate_is_new_type = candidate_values.isin(
+            existing_values.loc[
+                candidate_exists_wrong_type,
+                value_column_label
+            ]
+        )
+
+        candidate_is_new_value = ~candidate_values.isin(
+            existing_values[value_column_label]
+        )
+
+        candidate_is_new_value = candidate_values.loc[
+            candidate_is_new_type | candidate_is_new_value
+        ]
+
+        return candidate_is_new_value
 
 def missing_integers(input_values, rng=None):
     '''
