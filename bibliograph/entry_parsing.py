@@ -234,6 +234,10 @@ def parse_entries(
         A single string or set of string values which represent missing
         items in an entry.
 
+    s_d_delimiter : str
+        A string-valued delimiter separating elements in a
+        self-descriptive shorthand entry
+
     Returns
     -------
     pandas.DataFrame
