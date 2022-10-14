@@ -1179,7 +1179,8 @@ def textnet_from_parsed_shorthand(
         entry_syntax_assertions = tn.get_assertions_by_link_type(
             'shorthand_entry_syntax'
         )
-        entry_syntax = entry_syntax_assertions['tgt_string'].squeeze()
+        entry_syntax_string_id = entry_syntax_assertions['tgt_string_id'].squeeze()
+        entry_syntax = tn.strings.loc[entry_syntax_string_id, 'string']
         entry_syntax = bg.syntax_parsing.validate_entry_syntax(
             entry_syntax,
             case_sensitive=input_metadata['syntax_case_sensitive'],

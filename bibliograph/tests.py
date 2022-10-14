@@ -704,6 +704,7 @@ def test_bibtex_identifier_parsing():
         "bibliograph/test_data/bibtex_test_data_short.bib",
         entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
         syntax_case_sensitive=False,
+        allow_redundant_items=True,
         space_char='|',
         na_string_values='!',
         na_node_type='missing',
@@ -837,6 +838,7 @@ def test_bibtex_input_uses_all_strings():
         "bibliograph/test_data/bibtex_test_data_short.bib",
         entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
         syntax_case_sensitive=False,
+        allow_redundant_items=True,
         space_char='|',
         na_string_values='!',
         na_node_type='missing',
@@ -864,6 +866,7 @@ def test_bibtex_input_connects_all_non_tag_nodes():
         "bibliograph/test_data/bibtex_test_data_short.bib",
         entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
         syntax_case_sensitive=False,
+        allow_redundant_items=True,
         space_char='|',
         na_string_values='!',
         na_node_type='missing',
@@ -892,6 +895,7 @@ def test_bibtex_input_uses_all_types():
         "bibliograph/test_data/bibtex_test_data_short.bib",
         entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
         syntax_case_sensitive=False,
+        allow_redundant_items=True,
         space_char='|',
         na_string_values='!',
         na_node_type='missing',
@@ -1349,3 +1353,43 @@ def test_single_column_input_uses_all_types():
     )
 
     assert unused_link_types.empty and unused_node_types.empty
+
+
+def test_bibliograph_to_shorthand_conversion():
+
+    tn = bg.slurp_bibtex(
+        "bibliograph/test_data/bibtex_test_data_short.bib",
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        allow_redundant_items=True,
+        syntax_case_sensitive=False,
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+    )
+
+    synthesized = tn.synthesize_shorthand_entries(
+        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
+        node_type='work',
+        fill_spaces=True,
+        item_separator='__',
+        comment_char='#',
+        space_char='|',
+        hide_default_entry_prefixes=True
+    )
+
+    expected_values = [
+        'Newkirk,|Gordon|A._Eddy,|John|A.__1962__s_Nature__194__638_641__10.1038/194638b0',
+        'Wiin-Nielsen,|A.__1962__s_Monthly|Weather|Review__90__311_323__10.1175/1520-0493(1962)090<0311:OTOKEB>2.0.CO;2',
+        'Wiin-Nielsen,|A.__1962__s_Tellus__14__280_261__10.3402/tellusa.v14i3.9551',
+        'Lally,|Vincent|E.__1962__s_Bulletin|of|the|American|Meteorological|Society__43__453_451__10.1175/1520-0477-43.9.451',
+        'Turner,|J.|S._Squires,|P.__1962__s_Tellus__14__434_422__10.3402/tellusa.v14i4.9569',
+        'London,|Julius__1962__s_Archiv|für|Meteorologie,|Geophysik|und|Bioklimatologie,|Serie|B__12__77_64__10.1007/BF02317953',
+        'Haurwitz,|B.__1962__s_Archiv|für|Meteorologie,|Geophysik|und|Bioklimatologie,|Serie|A__13__144_166__10.1007/BF02247180',
+        'Chapman,|S._Akasofu,|S.-I._Venkatesan,|B.__1963__s_Journal|of|Geophysical|Research__68__3345_3350__10.1029/JZ068i011p03345',
+        'Chapman,|Sydney_Akasofu,|Syun-Ichi__1963__s_Journal|of|Geophysical|Research__68__2382_2375__10.1029/JZ068i009p02375',
+        'Latham,|J._Mason,|B.|J.__1961__s_Proceedings|of|the|Royal|Society|of|London.|A.|Mathematical|and|Physical|Sciences__260__549_537__!',
+        'Smagorinsky,|Joseph__1965__s_Proceedings|of|the|{IBM}|scientific|computing|symposium|on|large-scale|problems|in|physics:|{December}|9-11,|1963__!__144_141__!'
+
+    ]
+
+    assert (synthesized == expected_values).all()

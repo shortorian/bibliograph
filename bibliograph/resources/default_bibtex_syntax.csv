@@ -3,8 +3,8 @@ work,author,actor,author," and "
 work,editor,actor,superauthor," and "
 work,collaborator,actor,collaborator,
 work,title,work,title,
-work,journal,work,journal,
-work,booktitle,work,booktitle,
+work,journal,work,supertitle,
+work,booktitle,work,supertitle,
 work,school,actor,affiliation,
 work,year,date,published,
 work,volume,work,volume,

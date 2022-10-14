@@ -2,6 +2,7 @@ left_entry_prefix,right_entry_prefix,source_position,target_position,link_type,l
 wrk,wrk,L,R,cited,,L
 wrk,aff,L0,R0,affiliated,1:1,L
 wrk,fun,R0,L,funded,,L
+wrk,fun,L,R0,acknowledged,,L
 wrk,fun,R0,L0,funded,m:m,L
 wrk,fun,R1,L,funded,,L
 wrk,fun,R1,L0,funded,m:m,L

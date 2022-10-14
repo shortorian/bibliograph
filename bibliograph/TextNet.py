@@ -168,7 +168,12 @@ def complete_entry_strings(
         )
 
     else:
-        entry_parts['0'] = entry_parts['entry_prefix'] + sep + entry_parts['0']
+        has_prefix = entry_parts['entry_prefix'].notna()
+        entry_parts.loc[has_prefix, '0'] = (
+            entry_parts.loc[has_prefix, 'entry_prefix'] +
+            sep +
+            entry_parts.loc[has_prefix, '0']
+        )
 
     entry_parts = entry_parts.drop('entry_prefix', axis='columns')
 
@@ -381,13 +386,15 @@ def synthesize_entries_from_links(
     # list positions, concatenate the item strings in the order they
     # appear in the group.
     position_is_duplicated = group['item_position'].duplicated(keep=False)
-    list_items = group.loc[position_is_duplicated]
+    position_is_not_prefixed = group['item_label'].str.isdigit()
+    to_concat = position_is_duplicated & position_is_not_prefixed
+    list_items = group.loc[to_concat]
 
     if not list_items.empty:
         list_items = list_items.groupby(by='item_position', group_keys=False)
         list_items = list_items.apply(concat_list_item_elements)
 
-        group = pd.concat([group.loc[~position_is_duplicated], list_items])
+        group = pd.concat([group.loc[~to_concat], list_items])
 
     # The group of edges now has one row per item position except for
     # prefixed items. The group might contain links to multiple prefixed
@@ -1110,7 +1117,6 @@ class TextNet():
 
         try:
             self.nodes
-            print(component)
             component_is_literal = (
                 component['node_id'].map(self.nodes['node_type_id']).isin(
                     literal_type_id
@@ -2088,15 +2094,6 @@ class TextNet():
         except NodesNotFoundError:
             return self.strings.loc[selection.index]
 
-    # each entry should be built according to its own syntax, or the
-    # caller can identify one explicitly.
-    # OUTLINE:
-    #   - map node IDs to entry syntaxes
-    #   - nodes with more than one entry syntax should get the syntax
-    #     that's more common
-    #   - use the code that applies link constraints as a guide to
-    #     generate the entries
-
     def synthesize_shorthand_entries(
         self,
         node_subset=None,
@@ -2297,7 +2294,7 @@ class TextNet():
                         entry_syntax_string['string']
                     )
 
-            syntax = bg.syntax_parsing.validate_entry_syntax(
+            syntax_df = bg.syntax_parsing.validate_entry_syntax(
                 entry_syntax_string,
                 case_sensitive=syntax_case_sensitive,
                 allow_redundant_items=allow_redundant_items
@@ -2306,7 +2303,7 @@ class TextNet():
             entry_parts = synthesize_entries_by_syntax(
                 self,
                 node_ids,
-                syntax,
+                syntax_df,
                 name_type,
                 entry_prefix
             )
@@ -2473,16 +2470,41 @@ class TextNet():
                 )
             }
 
-        entry_parts = [
-            complete_entry_strings(
-                entry_parts.query('syntax_string_id == @i'),
-                input_metadata,
-                fill_spaces,
-                hide_default_entry_prefixes=hide_default_entry_prefixes
+        try:
+            syntax_df
+
+            if hide_default_entry_prefixes is True:
+                default_prefix = bg.util.get_single_value(
+                    syntax_df,
+                    'default_entry_prefix'
+                )
+            elif hide_default_entry_prefixes is not False:
+                default_prefix = hide_default_entry_prefixes
+
+            if hide_default_entry_prefixes:
+                pfix_to_drop = entry_parts['entry_prefix'] == default_prefix
+                entry_parts.loc[pfix_to_drop, 'entry_prefix'] = pd.NA
+
+            entry_strings = complete_entry_strings(
+                    entry_parts,
+                    input_metadata,
+                    fill_spaces,
+                    hide_default_entry_prefixes=False
             )
-            for i in entry_parts['syntax_string_id'].unique()
-        ]
-        entry_strings = pd.concat(entry_parts)
+
+        except NameError:
+
+            entry_parts = [
+                complete_entry_strings(
+                    entry_parts.query('syntax_string_id == @i'),
+                    input_metadata,
+                    fill_spaces,
+                    hide_default_entry_prefixes=True
+                )
+                for i in entry_parts['syntax_string_id'].unique()
+            ]
+            entry_strings = pd.concat(entry_parts)
+
 
         if entry_strings.empty:
             return pd.Series(dtype='object')
@@ -2493,25 +2515,3 @@ class TextNet():
                 index=entry_strings.index.array
             )
 
-    def synthesize_shorthand_links(
-        self,
-        node_subset=None,
-        node_type=None,
-        link_type=None,
-        entry_syntax=None,
-        link_syntax=None,
-        syntax_case_sensitive=True,
-        allow_redundant_items=False,
-        item_separator=None,
-        comment_char=None,
-        space_char=None,
-        sort_entries_by=None,
-        sort_entry_prefixes=True,
-        sort_case_sensitive=True,
-        fill_spaces=False,
-        name_type='abbr',
-        hide_default_entry_prefixes=False,
-        hide_default_link_types=False
-    ):
-
-        pass
