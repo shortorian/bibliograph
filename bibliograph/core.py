@@ -1,3 +1,4 @@
+from ast import literal_eval
 import bibliograph as bg
 import pandas as pd
 import inspect
@@ -8,16 +9,20 @@ from datetime import datetime
 from io import StringIO
 from pathlib import Path
 
+from bibliograph.TextNet import IdLookupError
+
+
+def time_string():
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
 
 def _insert_alias_assertions(
     tn,
-    parsed,
     aliases_dict,
     aliases_case_sensitive,
-    input_source_string_id
+    inp_string_id,
+    generators=None
 ):
-
-    time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # convert aliases_dict into dictionary of dataframes
     aliases = {
@@ -27,11 +32,17 @@ def _insert_alias_assertions(
         for k, v in aliases_dict.items()
         if k in tn.node_types['node_type'].array
     }
+
+    aliases = {k: v for k, v in aliases.items() if not v.empty}
+
+    if len(aliases) == 0:
+        return
+
     aliases_dict = {k: v.to_csv(index=False) for k, v in aliases.items()}
 
     # Get relevant aliases out of each set of aliases
     aliases = {
-        k: _select_aliases(v, parsed, k, aliases_case_sensitive)
+        k: _select_aliases(v, tn, k, aliases_case_sensitive)
         for k, v in aliases.items()
     }
     if not aliases_case_sensitive:
@@ -55,12 +66,12 @@ def _insert_alias_assertions(
     }
 
     # add any new strings we found to the textnet strings frame
+    # we're not using tn.insert_string here because we need to check the
+    # strings after doing the dict comprehension below.
     new_strings = [
         pd.DataFrame({
             'string': v.stack().array,
-            'node_type_id': node_type_ids[k],
-            'date_inserted': time_string,
-            'date_modified': pd.NA
+            'node_type_id': node_type_ids[k]
         })
         for k, v in aliases.items()
     ]
@@ -68,14 +79,19 @@ def _insert_alias_assertions(
 
     # Add a node type for alias reference strings and add the alias
     # reference strings to the new strings
-    alias_ref_node_id = tn.insert_node_type('alias_reference')
-    alias_ref_strings = pd.DataFrame({
+    '''
+    SWITCHING TO LITERAL NODE TYPE
+    alias_txt_node_id = tn.insert_node_type('aliases_text')
+    alias_txt_strings = pd.DataFrame({
         'string': aliases_dict.values(),
-        'node_type_id': alias_ref_node_id,
-        'date_inserted': time_string,
-        'date_modified': pd.NA
+        'node_type_id': alias_txt_node_id
+    })'''
+    literal_csv_node_type_id = tn.insert_node_type('_literal_csv')
+    alias_txt_strings = pd.DataFrame({
+        'string': aliases_dict.values(),
+        'node_type_id': literal_csv_node_type_id
     })
-    new_strings = pd.concat([new_strings, alias_ref_strings])
+    new_strings = pd.concat([new_strings, alias_txt_strings])
 
     # drop any strings already present in tn.strings
     new_strings = new_strings.loc[
@@ -90,12 +106,15 @@ def _insert_alias_assertions(
     # make maps between string values and integer IDs relevant to each
     # set of aliases
     string_maps = {
-        k: bg.util.get_string_values(tn, node_type_subset=v)
+        k: tn.get_strings_by_node_type(v)['string']
         for k, v in node_type_ids.items()
     }
 
     if not aliases_case_sensitive:
 
+        # If aliases are not case sensitive then add new aliases
+        # between any existing strings that are duplicated when
+        # casefolded
         low_maps = {k: v.str.casefold() for k, v in string_maps.items()}
         case_alias = {
             k: (v != low_maps[k]) for k, v in string_maps.items()
@@ -143,6 +162,8 @@ def _insert_alias_assertions(
     }
 
     # Start building an assertions frame out of string values
+    # Do it this way instead of using tn.insert_assertion because
+    # insert_assertion can't currently handle multiple assertions
     new_assertions = {
         k: pd.DataFrame({
             'src_string_id': aliases[k]['key'].array,
@@ -161,10 +182,8 @@ def _insert_alias_assertions(
     # frame and then concat it with the partial assertions frame
     assertion_metadata = pd.DataFrame(
         {
-            'inp_string_id': input_source_string_id,
-            'link_type_id': alias_link_type_id,
-            'date_inserted': time_string,
-            'date_modified': pd.NA
+            'inp_string_id': inp_string_id,
+            'link_type_id': alias_link_type_id
         },
         index=new_assertions.index
     )
@@ -182,29 +201,44 @@ def _insert_alias_assertions(
     )
 
     tn.assertions = pd.concat([tn.assertions, new_assertions])
+    tn.reset_assertions_dtypes()
 
+    if generators is not None:
 
-def _make_syntax_metadata_table(textnet, parsed_shnd, entry_or_link):
+        new_assrtn_ids = new_assertions.index
 
-    if entry_or_link not in ['entry', 'link']:
-        raise ValueError('entry_or_link must be either "entry" or "link')
+        auto_ref_string_ids = tn.assertions.loc[
+            new_assrtn_ids,
+            'ref_string_id'
+        ]
+        auto_ref_string_ids = auto_ref_string_ids.unique()
 
-    try:
-        syntax_case_sensitive = parsed_shnd.__getattribute__(
-            entry_or_link + '_syntax_case_sensitive'
+        tn.strings = tn.strings.drop(auto_ref_string_ids)
+
+        frame = inspect.currentframe()
+        current_module = inspect.getframeinfo(frame).filename
+        current_module = Path(current_module).stem.split('.')[0]
+        current_function = inspect.getframeinfo(frame).function
+        current_function = '.'.join(
+            ['bibliograph', current_module, current_function]
         )
 
-    except AttributeError:
-        syntax_case_sensitive = parsed_shnd.syntax_case_sensitive
+        ref_args = {
+            'tn': tn,
+            'aliases_dict': aliases_dict,
+            'aliases_case_sensitive': aliases_case_sensitive,
+            'inp_string_id': inp_string_id,
+            'generators': generators
+        }
+        ref_string = ('{}(**{})'.format(current_function, ref_args))
 
-    syntax_node_type = 'shorthand_{}_syntax'.format(entry_or_link)
+        ref_string_id = tn.insert_string(
+            ref_string,
+            '_python_function_call',
+            add_node_type=True
+        )
 
-    metadata = {
-        'case_sensitive': syntax_case_sensitive,
-        'allow_redundant_items': parsed_shnd.allow_redundant_items
-    }
-
-    textnet.insert_metadata_table(syntax_node_type, metadata)
+        tn.assertions.loc[new_assrtn_ids, 'ref_string_id'] = ref_string_id
 
 
 def _read_file_from_path_or_read_str_as_buffer(
@@ -222,13 +256,13 @@ def _read_file_from_path_or_read_str_as_buffer(
 
 def _select_aliases(
     aliases,
-    parsed,
+    tn,
     node_type,
     case_sensitive=True,
     **kwargs
 ):
 
-    if parsed.strings.empty or aliases.empty:
+    if tn.strings.empty or aliases.empty:
         return pd.DataFrame(columns=aliases.columns)
 
     aliases.columns = ['key', 'value']
@@ -275,11 +309,9 @@ def _select_aliases(
                 )
             )
 
-    strings = bg.util.get_string_values(
-        parsed,
-        casefold=(not case_sensitive),
-        node_type_subset=node_type
-    )
+    strings = tn.get_strings_by_node_type(node_type)['string']
+    if not case_sensitive:
+        strings = strings.str.casefold()
 
     aliased_strings = aliases.stack()
     alias_in_strings = aliased_strings.isin(strings)
@@ -306,7 +338,8 @@ def _map_node_ids_for_single_link_constraint(
     constraint_row,
     tn,
     entry_syntax,
-    entry_syntax_string_id
+    entry_syntax_string_id,
+    inp_string_id
 ):
 
     node_type = constraint_row[0]
@@ -331,10 +364,16 @@ def _map_node_ids_for_single_link_constraint(
         [tn.id_lookup('link_types', lt) for lt in link_types]
     )
 
+    # Candidate assertions have the input string provided above
+    candidate_assertions = tn.get_assertions_by_string_id(
+        inp_string_id,
+        component='inp'
+    )
+
     # Candidates for assertions that meet this constraint must have
     # the link types listed in the constraint
-    candidate_assertions = tn.assertions.loc[
-        tn.assertions['link_type_id'].isin(link_type_ids),
+    candidate_assertions = candidate_assertions.loc[
+        candidate_assertions['link_type_id'].isin(link_type_ids),
         :
     ]
 
@@ -439,7 +478,7 @@ def _map_node_ids_for_single_link_constraint(
 
     node_id_map = candidate_assertions.dropna().drop_duplicates()
 
-    if candidate_assertions.empty:
+    if node_id_map.empty:
         return empty
 
     node_id_map = pd.Series(node_id_map.index, index=node_id_map.array)
@@ -469,26 +508,35 @@ def _get_strings_of_extreme_length(strings_frame, extremum_type):
 
 def get_node_id_map_from_link_constraints(
     tn,
-    link_constraints_string_id,
-    entry_syntax_string_id
+    link_constraint_string_id,
+    entry_syntax_string_id,
+    inp_string_id
 ):
 
     # The constraints are the full text of a CSV file stored in the
     # strings frame, so they need to be read into a dataframe
     constraints = pd.read_csv(
-        StringIO(tn.strings.loc[link_constraints_string_id, 'string']),
+        StringIO(tn.strings.loc[link_constraint_string_id, 'string']),
         encoding='utf8'
     )
 
     # Read the entry syntax into a dataframe and make a dictionary for
     # the definition of each node type mentioned in the constraints file
-    entry_syntax_node_id = tn.strings.loc[entry_syntax_string_id, 'node_id']
-    syntax_metadata = tn.shorthand_entry_syntax.query(
-        'node_id == @entry_syntax_node_id'
+    syntax_case_sensitive = tn.get_assertions_by_link_type(
+        'syntax_case_sensitive'
     )
+    syntax_case_sensitive = syntax_case_sensitive.query(
+        'inp_string_id == @inp_string_id'
+    )
+    syntax_case_sensitive = tn.strings.loc[
+        syntax_case_sensitive['tgt_string_id'].iloc[0],
+        'string'
+    ]
+    syntax_case_sensitive = literal_eval(syntax_case_sensitive)
+
     entry_syntax = bg.syntax_parsing.validate_entry_syntax(
         tn.strings.loc[entry_syntax_string_id, 'string'],
-        case_sensitive=syntax_metadata['case_sensitive'].squeeze()
+        case_sensitive=syntax_case_sensitive
     )
     entry_syntax = {
         node_type: entry_syntax.query('entry_node_type == @node_type')
@@ -500,7 +548,8 @@ def get_node_id_map_from_link_constraints(
             x,
             tn,
             entry_syntax,
-            entry_syntax_string_id
+            entry_syntax_string_id,
+            inp_string_id
         ),
         axis='columns'
     )
@@ -517,192 +566,263 @@ def get_node_id_map_from_link_constraints(
 
 
 def build_textnet_assertions(
-    parsed,
-    input_source_string,
-    input_source_node_type
+    tn,
+    inp_string,
+    textnet_build_parameters
 ):
 
-    # get a node_type_id for input source
-    try:
-        input_source_node_type_id = parsed.id_lookup(
-            'node_types',
-            input_source_node_type
+    # TextNet build parameters are values like case sensitivities and
+    # shorthand default entry prefixes. They're stored as string values
+    # with node type '_literal_python' so they can be identified and
+    # retrieved easily
+    '''if '_literal_python' in tn.node_types['node_type'].array:
+
+        literal_node_type_id = tn.id_lookup('node_types', '_literal_python')
+        q = 'node_type_id == @literal_node_type_id'
+        hashed_textnet_strings = pd.util.hash_pandas_object(
+            tn.strings.query(q)[['string', 'node_type_id']],
+            index=False
         )
 
-    except KeyError:
-
-        new_node_type = bg.util.normalize_types(
-            pd.Series([input_source_node_type]),
-            parsed.node_types
+        # Before storing any new literal values we need to check that we
+        # won't create duplicates. Hash pairs of values for faster search.
+        hashed_parameter_strings = pd.util.hash_pandas_object(
+            pd.DataFrame({
+                'string': [str(v) for v in textnet_build_parameters.values()],
+                'node_type_id': literal_node_type_id
+            }),
+            index=False
         )
-        parsed.node_types = pd.concat([parsed.node_types, new_node_type])
+        parameter_keys_to_keep = pd.Series(textnet_build_parameters.keys())
+        parameter_keys_to_keep = parameter_keys_to_keep.loc[
+            ~hashed_parameter_strings.isin(hashed_textnet_strings)
+        ]
 
-        input_source_node_type_id = parsed.node_types.index[-1]
-
-    # Insert a strings row for the input string
-    new_string = {
-        'string': input_source_string,
-        'node_type_id': input_source_node_type_id
-    }
-    new_string = bg.util.normalize_types(new_string, parsed.strings)
-    parsed.strings = pd.concat([parsed.strings, new_string])
-
-    # create a TextNet and cache a string for the insertion dates
-    tn = bg.TextNet()
-
-    time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
-    # create a column for the assertion inp_string_id
-    inp_string_id = pd.DataFrame(
-        new_string.index[0],
-        columns=['inp_string_id'],
-        index=parsed.links.index
-    )
-
-    # create the assertions table
-    tn.assertions = pd.concat([inp_string_id, parsed.links], axis='columns')
-    tn.assertions = tn.assertions.drop('list_position', axis='columns')
-    tn.assertions.loc[:, 'date_inserted'] = time_string
-    tn.assertions.loc[:, 'date_modified'] = pd.NA
-    tn.reset_assertions_dtypes()
-
-    # create the strings table
-    tn.strings = parsed.strings.copy()
-    tn.strings.loc[:, 'date_inserted'] = time_string
-    tn.strings.loc[:, 'date_modified'] = pd.NA
-
-    # create the node_types table
-    tn.node_types = pd.DataFrame(
-        {
-            'node_type': parsed.node_types.array,
-            'description': pd.NA,
-            'null_type': False,
-            'has_metadata': False
+        textnet_build_parameters = {
+            k: v
+            for k, v in parameter_keys_to_keep.array
         }
-    )
-    na_node_type_id = tn.id_lookup('node_types', parsed.na_node_type)
-    tn.node_types.loc[na_node_type_id, 'null_type'] = True
-    tn.reset_node_types_dtypes()
 
-    # create the link_types table
-    tn.link_types = pd.DataFrame(
-        {
-            'link_type': parsed.link_types.array,
-            'description': pd.NA,
-            'null_type': False
-        }
-    )
-    tn.reset_link_types_dtypes()
+    else:
+        pass
 
-    # create the assertion_tags table
-    tn.assertion_tags = parsed.link_tags.rename(
-        columns={'link_id': 'assertion_id'}
-    )
-    tn.reset_assertion_tags_dtypes()
+    input_metadata_link_type_ids = [
+        tn.insert_link_type(k) for k in textnet_build_parameters.keys()
+    ]
+    parameter_literals = [
+        '"{}"'.format(v) if isinstance(v, str) else str(v)
+        for v in textnet_build_parameters.values()
+    ]
+    parameter_literals = list(map(str, parameter_literals))
 
-    full_text_node_types = pd.Series(['shorthand_text', 'items_text'])
-    full_text_types_present = full_text_node_types.loc[
-        full_text_node_types.isin(parsed.node_types)
+    for v in set(parameter_literals):
+        tn.insert_string(v, '_literal_python', allow_duplicates='suppress')'''
+
+    parameter_literals = [
+        '"{}"'.format(v) if isinstance(v, str) else str(v)
+        for v in textnet_build_parameters.values()
     ]
 
-    if len(full_text_types_present) > 1:
-        raise ValueError(
-            'Found multiple full text node types. Can only process one '
-            'input text at a time'
-        )
-    elif full_text_types_present.empty:
-        raise ValueError(
-            'Could not find valid full text type in '
-            'ParsedShorthand.node_types. Must be one of {}'
-            .format(full_text_node_types)
-        )
+    tn.insert_string(
+        parameter_literals,
+        '_literal_python',
+        allow_duplicates='suppress',
+        add_node_type=True
+    )
 
-    text_node_type = full_text_types_present.squeeze()
+    inp_string_id = tn.id_lookup('strings', inp_string)
+    input_metadata_string_ids = [
+        tn.id_lookup('strings', v) for v in parameter_literals
+    ]
+    input_metadata_link_type_ids = [
+        tn.insert_link_type(k) for k in textnet_build_parameters.keys()
+    ]
 
-    text_metadata = {
-        'space_char': parsed.space_char,
-        'na_string_values': parsed.na_string_values,
-        'na_node_type': parsed.na_node_type,
-        'item_separator': parsed.item_separator,
-        'default_entry_prefix': parsed.default_entry_prefix
-    }
-
-    tn.insert_metadata_table(text_node_type, text_metadata)
-
-    _make_syntax_metadata_table(tn, parsed, 'entry')
-
-    if 'shorthand_link_syntax' in parsed.node_types.array:
-        _make_syntax_metadata_table(tn, parsed, 'link')
+    tn.insert_assertion(
+        inp_string_id,
+        inp_string_id,
+        input_metadata_string_ids,
+        inp_string_id,
+        input_metadata_link_type_ids
+    )
 
     return tn
 
 
 def complete_textnet_from_assertions(
     tn,
-    parsed,
     aliases_case_sensitive,
+    current_inp_string_id,
     link_constraints_string_id,
-    links_excluded_from_edges
+    links_excluded_from_edges,
+    apply_link_constraints=True
 ):
-
-    time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
     # If there are alias links in the assertions table, map them to the
     # same node IDs
-    if (tn.link_types['link_type'] == 'alias').any():
-
-        alias_link_type_ID = tn.id_lookup('link_types', 'alias')
-
-        aliases = tn.assertions.query('link_type_id == @alias_link_type_ID')
-        aliases = aliases[['src_string_id', 'tgt_string_id']]
-
-        # convert aliases to a one-to-many map
-        aliases = bg.util.make_bidirectional_map_one_to_many(aliases)
-
-        src_node_types = aliases['src_string_id'].map(
-            tn.strings['node_type_id']
+    try:
+        alias_link_type_id = tn.id_lookup('link_types', 'alias')
+        alias_assertions_exist = (
+            tn.assertions['link_type_id'] == alias_link_type_id
         )
-        tgt_node_types = aliases['tgt_string_id'].map(
-            tn.strings['node_type_id']
+        alias_assertions_exist = alias_assertions_exist.any()
+
+    except IdLookupError:
+        alias_assertions_exist = False
+
+    if alias_assertions_exist:
+
+        aliases_sensitivity_link_type_id = tn.id_lookup(
+            'link_types',
+            'aliases_case_sensitive'
         )
 
-        if (src_node_types != tgt_node_types).any():
-            raise ValueError(
-                'There are alias assertions between strings with '
-                'different node types'
+        link_is_alias_sensitivity = (
+            tn.assertions['link_type_id'] == aliases_sensitivity_link_type_id
+        )
+
+        case_snstve_alias_inputs = tn.get_assertions_by_literal_tgt(
+            True,
+            subset=link_is_alias_sensitivity
+        )
+        case_snstve_alias_inputs = case_snstve_alias_inputs['inp_string_id']
+        case_snstve_aliases = tn.assertions.query(
+            'inp_string_id.isin(@case_snstve_alias_inputs)'
+        )
+
+        case_snstve_aliases = case_snstve_aliases.query(
+            'link_type_id == @alias_link_type_id'
+        )
+
+        if not case_snstve_aliases.empty:
+
+            case_snstve_aliases = case_snstve_aliases[
+                ['src_string_id', 'tgt_string_id']
+            ]
+
+            # convert aliases to a one-to-many map
+            case_snstve_aliases = bg.util.make_bidirectional_map_one_to_many(
+                case_snstve_aliases
             )
 
-        if aliases_case_sensitive:
+            src_node_types = case_snstve_aliases['src_string_id'].map(
+                tn.strings['node_type_id']
+            )
+            tgt_node_types = case_snstve_aliases['tgt_string_id'].map(
+                tn.strings['node_type_id']
+            )
 
-            node_ids = aliases['src_string_id'].unique()
+            if (src_node_types != tgt_node_types).any():
+                raise ValueError(
+                    'There are alias assertions between strings with '
+                    'different node types'
+                )
+
+            src_string_ids = case_snstve_aliases['src_string_id'].unique()
             aliased_node_id_map = pd.Series(
-                range(len(node_ids)),
-                index=node_ids
+                range(len(src_string_ids)),
+                index=src_string_ids
             )
 
-        else:
+        case_insnstve_alias_inputs = tn.get_assertions_by_literal_tgt(
+            False,
+            subset=link_is_alias_sensitivity
+        )
+        case_insnstve_alias_inputs = case_insnstve_alias_inputs[
+            'inp_string_id'
+        ]
 
-            aliased_node_id_map = aliases['src_string_id'].map(
+        case_insnstve_aliases = tn.assertions.query(
+            'inp_string_id.isin(@case_insnstve_alias_inputs)'
+        )
+        case_insnstve_aliases = case_insnstve_aliases.query(
+            'link_type_id == @alias_link_type_id'
+        )
+
+        if not case_insnstve_aliases.empty:
+
+            case_insnstve_aliases = case_insnstve_aliases[
+                ['src_string_id', 'tgt_string_id']
+            ]
+
+            # convert aliases to a one-to-many map
+            case_insnstve_aliases = bg.util.make_bidirectional_map_one_to_many(
+                case_insnstve_aliases
+            )
+
+            src_node_types = case_insnstve_aliases['src_string_id'].map(
+                tn.strings['node_type_id']
+            )
+            tgt_node_types = case_insnstve_aliases['tgt_string_id'].map(
+                tn.strings['node_type_id']
+            )
+
+            if (src_node_types != tgt_node_types).any():
+                raise ValueError(
+                    'There are alias assertions between strings with '
+                    'different node types'
+                )
+
+            string_subset = case_insnstve_aliases['src_string_id'].map(
                 tn.strings['string']
             )
-            aliased_node_id_map = aliased_node_id_map.str.casefold()
+            string_subset = string_subset.str.casefold()
 
-            node_ids = aliased_node_id_map.unique()
+            node_ids = string_subset.unique()
             node_ids = pd.Series(range(len(node_ids)), index=node_ids)
 
-            aliased_node_id_map = aliased_node_id_map.map(node_ids)
+            insnstve_alias_map = string_subset.map(node_ids)
 
-            aliased_node_id_map = pd.concat(
+            insnstve_alias_map = pd.concat(
                 [
-                    aliases['src_string_id'].rename('src_string_id'),
-                    aliased_node_id_map.rename('node_id')
+                    case_insnstve_aliases['src_string_id'],
+                    insnstve_alias_map.rename('node_id')
                 ],
-                axis='columns')
-            aliased_node_id_map = aliased_node_id_map.drop_duplicates()
-            aliased_node_id_map = pd.Series(
-                aliased_node_id_map['node_id'].array,
-                index=aliased_node_id_map['src_string_id'].array
+                axis='columns'
             )
+            insnstve_alias_map = insnstve_alias_map.drop_duplicates()
+            insnstve_alias_map = pd.Series(
+                insnstve_alias_map['node_id'].array,
+                index=insnstve_alias_map['src_string_id'].array
+            )
+
+            if not case_snstve_aliases.empty:
+
+                aliased_node_id_map += insnstve_alias_map.max()
+
+                snstve_alias_map = aliased_node_id_map.rename('snstve_nodes')
+                snstve_alias_map = snstve_alias_map.reset_index().rename(
+                    columns={'index': 'src_string_id'}
+                )
+
+                insnstve_to_snstve_map = insnstve_alias_map.rename(
+                    'insnstve_nodes'
+                )
+                insnstve_to_snstve_map = insnstve_to_snstve_map.reset_index()
+                insnstve_to_snstve_map = insnstve_to_snstve_map.rename(
+                    columns={'index': 'src_string_id'}
+                )
+                insnstve_to_snstve_map = pd.Series(
+                    insnstve_to_snstve_map['insnstve_nodes'].array,
+                    index=insnstve_to_snstve_map['snstve_nodes']
+                )
+
+                aliased_node_id_map = aliased_node_id_map.map(
+                    insnstve_to_snstve_map
+                )
+
+                aliased_node_id_map = pd.concat(
+                    [aliased_node_id_map, insnstve_alias_map]
+                )
+
+                aliased_node_id_map = aliased_node_id_map.drop_duplicates()
+
+            else:
+
+                aliased_node_id_map = insnstve_alias_map
+
+        aliases = pd.concat([case_insnstve_aliases, case_snstve_aliases])
+        aliases = aliases.drop_duplicates()
 
         aliases.index = pd.Index(
             aliases['src_string_id'].map(aliased_node_id_map)
@@ -722,9 +842,7 @@ def complete_textnet_from_assertions(
             {
                 'node_type_id': name_strings['node_type_id'].array,
                 'name_string_id': name_strings.index,
-                'abbr_string_id': name_strings.index,
-                'date_inserted': time_string,
-                'date_modified': pd.NA
+                'abbr_string_id': name_strings.index
             },
             index=idx_of_name_strings.index
         )
@@ -741,9 +859,7 @@ def complete_textnet_from_assertions(
         new_nodes = pd.DataFrame({
             'node_type_id': strings_with_no_aliases['node_type_id'].array,
             'name_string_id': strings_with_no_aliases.index,
-            'abbr_string_id': strings_with_no_aliases.index,
-            'date_inserted': time_string,
-            'date_modified': pd.NA
+            'abbr_string_id': strings_with_no_aliases.index
         })
         new_nodes = bg.util.normalize_types(new_nodes, tn.nodes)
         tn.nodes = pd.concat([tn.nodes, new_nodes])
@@ -761,47 +877,13 @@ def complete_textnet_from_assertions(
             {
                 'node_type_id': tn.strings['node_type_id'].array,
                 'name_string_id': tn.strings.index,
-                'abbr_string_id': tn.strings.index,
-                'date_inserted': time_string,
-                'date_modified': pd.NA
+                'abbr_string_id': tn.strings.index
             }
         )
 
         tn.strings['node_id'] = tn.nodes.index
 
     tn.reset_strings_dtypes()
-
-    for name, table in tn.node_metadata_tables.items():
-        if 'string_id' in table.columns:
-            node_ids = table['string_id'].map(tn.strings['node_id'])
-            table = table.drop('string_id', axis='columns')
-            table = pd.concat(
-                [node_ids.rename('node_id'), table],
-                axis='columns'
-            )
-            tn.node_metadata_tables[name] = table
-
-    if link_constraints_string_id is not None:
-
-        entry_syntax_node_id = tn.shorthand_entry_syntax['node_id'].iloc[0]
-        entry_syntax_string_id = tn.nodes.loc[
-            entry_syntax_node_id,
-            'name_string_id'
-        ]
-
-        node_id_map = get_node_id_map_from_link_constraints(
-            tn,
-            link_constraints_string_id=link_constraints_string_id,
-            entry_syntax_string_id=entry_syntax_string_id
-        )
-
-        to_map = tn.strings['node_id'].isin(node_id_map.index)
-        mapped_values = tn.strings.loc[to_map, 'node_id'].map(node_id_map)
-        tn.strings.loc[to_map, 'node_id'] = mapped_values.array
-
-        tn.reset_strings_dtypes()
-
-        tn.nodes = tn.nodes.loc[tn.nodes.index.isin(tn.strings['node_id']), :]
 
     names = _get_strings_of_extreme_length(tn.strings, 'longest')
     names = names.drop_duplicates(subset='node_id')
@@ -811,6 +893,122 @@ def complete_textnet_from_assertions(
 
     tn.nodes.loc[names['node_id'], 'name_string_id'] = names.index
     tn.nodes.loc[abbrs['node_id'], 'abbr_string_id'] = abbrs.index
+
+    '''
+    SWITCHING TO LITERAL NODE TYPE
+    assert_input_op_requirements = tn.get_assertions_by_link_type('requires')
+    assert_input_op_requirements = assert_input_op_requirements.query(
+        '(inp_string_id == src_string_id) & (inp_string_id == ref_string_id)'
+    )
+    link_constraint_string_ids = tn.get_strings_by_node_type(
+        'link_constraints_text',
+        string_ids_only=True
+    )
+    assert_link_constraint_required = assert_input_op_requirements.query(
+        'tgt_string_id.isin(@link_constraint_string_ids)'
+    )
+
+    if apply_link_constraints and not assert_link_constraint_required.empty:
+
+        entry_syntax_string_ids = tn.get_strings_by_node_type(
+            'shorthand_entry_syntax',
+            string_ids_only=True
+        )
+        assert_entry_syntax_required = assert_input_op_requirements.query(
+            'tgt_string_id.isin(@entry_syntax_string_ids)'
+        )
+        entry_syntax_string_ids = pd.Series(
+            assert_entry_syntax_required['tgt_string_id'].array,
+            index=assert_entry_syntax_required['inp_string_id']
+        )
+
+        link_constraint_string_ids = pd.Series(
+            assert_link_constraint_required['tgt_string_id'].array,
+            index=assert_link_constraint_required['inp_string_id']
+        )'''
+    link_constraint_assertions = tn.get_assertions_by_link_type(
+        'link_constraints',
+        allow_missing_type=True
+    )
+
+    has_link_constraints = (link_constraints_string_id is not None)
+    if has_link_constraints and not link_constraint_assertions.empty:
+
+        link_constraint_assertions = link_constraint_assertions.sort_values(
+            by='inp_string_id'
+        )
+        link_constraint_string_ids = link_constraint_assertions[
+            'tgt_string_id'
+        ]
+
+        constrnt_inp_string_ids = (
+            link_constraint_assertions['inp_string_id'].unique()
+        )
+        entry_syntax_string_ids = tn.get_assertions_by_link_type(
+            'shorthand_entry_syntax'
+        )
+        entry_syntax_string_ids = entry_syntax_string_ids.query(
+            'inp_string_id.isin(@constrnt_inp_string_ids)'
+        )
+        entry_syntax_string_ids = entry_syntax_string_ids.sort_values(
+            by='inp_string_id'
+        )
+        entry_syntax_string_ids = entry_syntax_string_ids['tgt_string_id']
+
+        constraint_and_syntax_string_id_by_inp_string_id = pd.DataFrame(
+            {
+                'link_constraint_string_id': link_constraint_string_ids.array,
+                'entry_syntax_string_id': entry_syntax_string_ids.array,
+            },
+            index=link_constraint_assertions['inp_string_id']
+        )
+
+        def apply_link_constraints(inp_string_id, id_pair):
+            return get_node_id_map_from_link_constraints(
+                tn,
+                link_constraint_string_id=id_pair['link_constraint_string_id'],
+                entry_syntax_string_id=id_pair['entry_syntax_string_id'],
+                inp_string_id=inp_string_id
+            )
+
+        node_id_map = {
+            inp_string_id: apply_link_constraints(inp_string_id, id_pair)
+            for inp_string_id, id_pair in
+            constraint_and_syntax_string_id_by_inp_string_id.iterrows()
+        }
+        node_id_map = pd.concat(node_id_map.values())
+
+        alias_link_type_id = tn.insert_link_type('alias')
+
+        src_string_ids = tn.nodes.loc[node_id_map.index, 'name_string_id']
+        tgt_string_ids = tn.nodes.loc[node_id_map, 'name_string_id']
+
+        new_assertions = pd.DataFrame({
+            'inp_string_id': current_inp_string_id,
+            'src_string_id': src_string_ids.array,
+            'tgt_string_id': tgt_string_ids.array,
+            'ref_string_id': link_constraints_string_id,
+            'link_type_id': alias_link_type_id
+        })
+        new_assertions = bg.util.normalize_types(new_assertions, tn.assertions)
+        tn.assertions = pd.concat([tn.assertions, new_assertions])
+
+        tn.strings['node_type_id'] = tn.strings['node_id'].map(
+            tn.nodes['node_type_id']
+        )
+
+        cols = ['string', 'node_type_id', 'date_inserted', 'date_modified']
+        tn.strings = tn.strings[[c for c in cols if c in tn.strings.columns]]
+        del tn.nodes
+
+        return complete_textnet_from_assertions(
+            tn,
+            aliases_case_sensitive=aliases_case_sensitive,
+            current_inp_string_id=current_inp_string_id,
+            link_constraints_string_id=None,
+            links_excluded_from_edges=links_excluded_from_edges,
+            apply_link_constraints=False
+        )
 
     tn.reset_nodes_dtypes()
 
@@ -828,16 +1026,14 @@ def complete_textnet_from_assertions(
 
         assertion_selection = tn.assertions
 
-    def map_assert_str_to_nodes(label):
+    def map_assert_str_id_to_node_id(label):
         return assertion_selection[label].map(tn.strings['node_id'])
 
     tn.edges = pd.DataFrame({
-        'src_node_id': map_assert_str_to_nodes('src_string_id').array,
-        'tgt_node_id': map_assert_str_to_nodes('tgt_string_id').array,
-        'ref_node_id': map_assert_str_to_nodes('ref_string_id').array,
-        'link_type_id': assertion_selection['link_type_id'].array,
-        'date_inserted': time_string,
-        'date_modified': pd.NA
+        'src_node_id': map_assert_str_id_to_node_id('src_string_id').array,
+        'tgt_node_id': map_assert_str_id_to_node_id('tgt_string_id').array,
+        'ref_node_id': map_assert_str_id_to_node_id('ref_string_id').array,
+        'link_type_id': assertion_selection['link_type_id'].array
     })
     tn.edges = tn.edges.drop_duplicates().reset_index(drop=True)
 
@@ -850,40 +1046,51 @@ def complete_textnet_from_assertions(
 
 def textnet_from_parsed_shorthand(
     parsed,
-    input_source_string,
-    input_source_node_type,
+    inp_string,
     aliases_dict=None,
     aliases_case_sensitive=True,
     automatic_aliasing=False,
     link_constraints_fname=None,
-    links_excluded_from_edges=None
+    links_excluded_from_edges=None,
+    textnet_build_parameters=None
 ):
+
+    linking_parameters = {
+        'aliases_dict': aliases_dict,
+        'aliases_case_sensitive': aliases_case_sensitive,
+        'automatic_aliasing': automatic_aliasing,
+        'links_excluded_from_edges': links_excluded_from_edges
+    }
+
+    if textnet_build_parameters is not None:
+        textnet_build_parameters.update(linking_parameters)
+    else:
+        textnet_build_parameters = linking_parameters
 
     tn = build_textnet_assertions(
         parsed,
-        input_source_string,
-        input_source_node_type
+        inp_string,
+        textnet_build_parameters
     )
 
-    input_source_string_id = tn.strings.loc[
-        tn.strings['string'] == input_source_string
-    ]
-    input_source_string_id = input_source_string_id.index[0]
+    inp_string_id = tn.id_lookup('strings', inp_string)
+    #alias_link_type_id = tn.insert_link_type('alias')
 
     if aliases_dict is not None:
+
         _insert_alias_assertions(
             tn,
-            parsed,
             aliases_dict,
             aliases_case_sensitive,
-            input_source_string_id=input_source_string_id
+            inp_string_id=inp_string_id
         )
 
+    actor_aliaser = bg.alias_generators.western_surname_alias_generator_vector
+    id_aliaser = bg.alias_generators.doi_alias_generator
+
     if automatic_aliasing:
-        alias_generators = {
-            'actor': bg.alias_generators.western_surname_alias_generator_vector,
-            'identifier': bg.alias_generators.doi_alias_generator
-        }
+
+        alias_generators = {'actor': actor_aliaser, 'identifier': id_aliaser}
 
         strings = {
             k: tn.select_strings_by_node_type(k)
@@ -910,58 +1117,79 @@ def textnet_from_parsed_shorthand(
 
         _insert_alias_assertions(
             tn,
-            tn,
             aliases_dict,
             aliases_case_sensitive=False,
-            input_source_string_id=input_source_string_id
+            inp_string_id=inp_string_id,
+            generators=alias_generators
         )
 
     if link_constraints_fname is not None:
-
-        link_constraints_node_type_id = tn.insert_node_type(
-            'link_constraints_text'
-        )
 
         with open(link_constraints_fname, 'r', encoding='utf8') as f:
             link_constraints_text = f.read()
 
         if link_constraints_text not in tn.strings['string'].array:
-            '''new_string = pd.DataFrame({
-                'string': link_constraints_text,
-                'node_type_id': link_constraints_node_type_id,
-                'date_inserted': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'date_modified': pd.NA
-            })
-            new_string = bg.util.normalize_types(new_string, tn.strings)'''
-            time_string = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            new_string = bg.util.normalize_types(
-                {
-                    'string': link_constraints_text,
-                    'node_type_id': link_constraints_node_type_id,
-                    'date_inserted': time_string,
-                    'date_modified': pd.NA
-                },
-                tn.strings
+
+            '''
+            SWITCHING TO LITERAL NODE TYPE
+            link_constraints_node_type_id = tn.insert_node_type(
+                'link_constraints_text'
             )
-            tn.strings = pd.concat([tn.strings, new_string])
-            link_constraints_string_id = new_string.index[0]
+
+            link_constraints_string_id = tn.insert_string(
+                link_constraints_text,
+                link_constraints_node_type_id,
+                time_string()
+            )'''
+
+            link_constraints_string_id = tn.insert_string(
+                link_constraints_text,
+                tn.id_lookup('node_types', '_literal_csv'),
+                time_string()
+            )
+
+            tn.insert_link_type('link_constraints')
+
+            tn.insert_assertion(
+                inp_string,
+                inp_string,
+                link_constraints_text,
+                inp_string,
+                'link_constraints'
+            )
 
     else:
-
         link_constraints_string_id = None
 
-    entry_syntax_metadata = tn.shorthand_entry_syntax.squeeze()
+    input_metadata = tn.resolve_assertions(
+        subset=tn.get_assertions_by_tgt_node_type('_literal_python').index
+    )
+    input_metadata = dict(zip(
+        input_metadata['link_type'],
+        [literal_eval(v) for v in input_metadata['tgt_string'].array]
+    ))
 
-    if entry_syntax_metadata['allow_redundant_items']:
+    if input_metadata['allow_redundant_items']:
 
-        entry_syntax = tn.strings.loc[
-            entry_syntax_metadata['string_id'],
-            'string'
-        ]
+        '''
+        SWITCHING TO LITERAL NODE TYPE
+        entry_syntax_assertions = tn.get_assertions_by_tgt_node_type(
+            'shorthand_entry_syntax'
+        )'''
+        entry_syntax_assertions = tn.get_assertions_by_link_type(
+            'shorthand_entry_syntax'
+        )
+        entry_syntax = entry_syntax_assertions['tgt_string'].squeeze()
         entry_syntax = bg.syntax_parsing.validate_entry_syntax(
             entry_syntax,
-            case_sensitive=entry_syntax_metadata['case_sensitive'],
-            allow_redundant_items=True
+            case_sensitive=input_metadata['syntax_case_sensitive'],
+            allow_redundant_items=input_metadata['allow_redundant_items']
+        )
+
+        default_na_string_value = input_metadata['na_string_values'][0]
+        default_na_string_id = tn.id_lookup('strings', default_na_string_value)
+        assertion_subset = tn.assertions.query(
+            'tgt_string_id == @default_na_string_id'
         )
 
         duplicate_link_types = entry_syntax['item_link_type'].loc[
@@ -970,34 +1198,10 @@ def textnet_from_parsed_shorthand(
         duplicate_link_type_ids = [
             tn.id_lookup('link_types', lt) for lt in duplicate_link_types
         ]
-
-        full_text_metadata = {
-            k: v for k, v in tn.node_metadata_tables.items()
-            if k.endswith('_text')
-        }
-
-        if len(full_text_metadata) > 1:
-            raise ValueError(
-                'Found multiple full text node types. Can only process'
-                'one input text at a time'
-            )
-        else:
-            full_text_metadata = full_text_metadata.popitem()[1]
-
-        default_na_string_value = full_text_metadata['na_string_values']
-        default_na_string_value = default_na_string_value.squeeze()[0]
-        default_na_string_id = tn.id_lookup('strings', default_na_string_value)
-
-        na_node_type = full_text_metadata['na_node_type'].squeeze()
-        na_node_type_id = tn.id_lookup('node_types', na_node_type)
-
-        assertion_subset = tn.assertions.query(
-            'tgt_string_id == @default_na_string_id'
-        )
         assertion_subset = assertion_subset.query(
             'link_type_id.isin(@duplicate_link_type_ids)'
         )
-        print(assertion_subset)
+
         column_subset = ['src_string_id', 'tgt_string_id', 'link_type_id']
         assertions_to_keep = assertion_subset[column_subset].duplicated(
             keep='first'
@@ -1007,13 +1211,27 @@ def textnet_from_parsed_shorthand(
 
         tn.assertions = tn.assertions.drop(drop_assertion_ids)
 
-    return complete_textnet_from_assertions(
+    tn = complete_textnet_from_assertions(
         tn,
-        parsed,
         aliases_case_sensitive,
+        inp_string_id,
         link_constraints_string_id=link_constraints_string_id,
         links_excluded_from_edges=links_excluded_from_edges
     )
+
+    date_inserted = time_string()
+
+    for attr in ['assertions', 'strings', 'nodes', 'edges']:
+        table = tn.__getattr__(attr)
+        table['date_inserted'] = date_inserted
+        table['date_modified'] = pd.NA
+
+    tn.reset_assertions_dtypes()
+    tn.reset_strings_dtypes()
+    tn.reset_nodes_dtypes()
+    tn.reset_edges_dtypes()
+
+    return tn
 
 
 def slurp_bibtex(
@@ -1048,7 +1266,7 @@ def slurp_bibtex(
     args = {k: v for k, v in locals().items() if k not in excluded_locals}
     args.update(kwargs)
 
-    input_source_string = '{}(**{})'.format(current_function, args)
+    inp_string = '{}(**{})'.format(current_function, args)
 
     # initialize bibtex and shorthand parsers
     bibtex_parser = _bibtexparser(common_strings=True)
@@ -1082,18 +1300,24 @@ def slurp_bibtex(
         parsed = s.parse_items(
             pd.DataFrame(bibtex_parser.parse_file(f).entries),
             entry_writer=entry_writer,
+            input_string=inp_string,
+            input_node_type='_python_function_call',
             **kwargs
         )
 
+    textnet_build_parameters = kwargs
+    textnet_build_parameters['syntax_case_sensitive'] = syntax_case_sensitive
+    textnet_build_parameters['allow_redundant_items'] = allow_redundant_items
+
     tn = textnet_from_parsed_shorthand(
         parsed,
-        input_source_string,
-        'python_function',
+        inp_string,
         aliases_dict,
         aliases_case_sensitive,
         automatic_aliasing,
         link_constraints_fname,
-        links_excluded_from_edges
+        links_excluded_from_edges,
+        textnet_build_parameters
     )
 
     return tn
@@ -1110,7 +1334,13 @@ def slurp_shorthand(
     automatic_aliasing=False,
     link_constraints_fname=None,
     links_excluded_from_edges=None,
-    **kwargs
+    item_separator='__',
+    space_char='|',
+    skiprows=0,
+    na_string_values='!',
+    na_node_type='missing',
+    default_entry_prefix='wrk',
+    comment_char='#'
 ):
 
     # make a string value representing the current function call
@@ -1130,9 +1360,8 @@ def slurp_shorthand(
         'kwargs'
     ]
     args = {k: v for k, v in locals().items() if k not in excluded_locals}
-    args.update(kwargs)
 
-    input_source_string = '{}(**{})'.format(current_function, args)
+    inp_string = '{}(**{})'.format(current_function, args)
 
     s = bg.Shorthand(
         entry_syntax=entry_syntax_fname,
@@ -1141,17 +1370,115 @@ def slurp_shorthand(
         allow_redundant_items=allow_redundant_items
     )
 
-    parsed = s.parse_text(shorthand_fname, **kwargs)
+    textnet_build_parameters = {
+        'item_separator': item_separator,
+        'space_char': space_char,
+        'na_string_values': na_string_values,
+        'na_node_type': na_node_type,
+        'default_entry_prefix': default_entry_prefix,
+        'comment_char': comment_char,
+        'skiprows': skiprows
+    }
+
+    parsed = s.parse_text(
+        shorthand_fname,
+        input_string=inp_string,
+        input_node_type='_python_function_call',
+        **textnet_build_parameters
+    )
+
+    textnet_build_parameters['syntax_case_sensitive'] = syntax_case_sensitive
+    textnet_build_parameters['allow_redundant_items'] = allow_redundant_items
 
     tn = textnet_from_parsed_shorthand(
         parsed,
-        input_source_string,
-        'python_function',
+        inp_string,
         aliases_dict,
         aliases_case_sensitive,
         automatic_aliasing,
         link_constraints_fname,
-        links_excluded_from_edges
+        links_excluded_from_edges,
+        textnet_build_parameters
+    )
+
+    return tn
+
+
+def slurp_single_column(
+    shorthand_fname,
+    entry_syntax_fname,
+    syntax_case_sensitive=True,
+    allow_redundant_items=False,
+    aliases_dict=None,
+    aliases_case_sensitive=True,
+    automatic_aliasing=False,
+    link_constraints_fname=None,
+    links_excluded_from_edges=None,
+    item_separator='__',
+    space_char='|',
+    skiprows=0,
+    na_string_values='!',
+    na_node_type='missing',
+    default_entry_prefix='wrk',
+    comment_char='#'
+):
+
+    # make a string value representing the current function call
+    frame = inspect.currentframe()
+    current_module = inspect.getframeinfo(frame).filename
+    current_module = Path(current_module).stem.split('.')[0]
+    current_function = inspect.getframeinfo(frame).function
+    current_function = '.'.join(
+        ['bibliograph', current_module, current_function]
+    )
+
+    excluded_locals = [
+        'frame',
+        'current_module',
+        'current_function',
+        'excluded_locals',
+        'kwargs'
+    ]
+    args = {k: v for k, v in locals().items() if k not in excluded_locals}
+
+    inp_string = '{}(**{})'.format(current_function, args)
+
+    s = bg.Shorthand(
+        entry_syntax=entry_syntax_fname,
+        syntax_case_sensitive=syntax_case_sensitive,
+        allow_redundant_items=allow_redundant_items
+    )
+
+    textnet_build_parameters = {
+        'item_separator': item_separator,
+        'space_char': space_char,
+        'na_string_values': na_string_values,
+        'na_node_type': na_node_type,
+        'default_entry_prefix': default_entry_prefix,
+        'comment_char': comment_char,
+        'skiprows': skiprows
+    }
+
+    parsed = s.parse_text(
+        shorthand_fname,
+        input_string=inp_string,
+        input_node_type='_python_function_call',
+        drop_na=[],
+        **textnet_build_parameters
+    )
+
+    textnet_build_parameters['syntax_case_sensitive'] = syntax_case_sensitive
+    textnet_build_parameters['allow_redundant_items'] = allow_redundant_items
+
+    tn = textnet_from_parsed_shorthand(
+        parsed,
+        inp_string,
+        aliases_dict,
+        aliases_case_sensitive,
+        automatic_aliasing,
+        link_constraints_fname,
+        links_excluded_from_edges,
+        textnet_build_parameters
     )
 
     return tn

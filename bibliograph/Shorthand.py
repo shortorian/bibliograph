@@ -630,6 +630,8 @@ class Shorthand:
         space_char,
         na_string_values,
         na_node_type,
+        input_string,
+        input_node_type,
         skiprows,
         comment_char,
         fill_cols,
@@ -926,7 +928,11 @@ class Shorthand:
 
         # These link types are required to complete linking operations
         # later
+        '''
+        SWITCHING TO LITERAL NODE TYPE
         link_types = pd.Series(['entry', 'tagged', 'requires'])
+        '''
+        link_types = pd.Series(['entry', 'tagged'])
 
         # Map string-valued link types to integer IDs
         link_types = _create_id_map(
@@ -1022,6 +1028,8 @@ class Shorthand:
         )
         data = data.rename(columns={'string': 'string_id'})
 
+        '''
+        SWITCHING TO LITERAL_CSV AND LITERAL_PYTHON
         # These node types will be required later
         node_types = pd.Series([
             'shorthand_text',
@@ -1033,6 +1041,11 @@ class Shorthand:
         # Map string-valued node types to integer IDs
         node_types = _create_id_map(
             pd.concat([node_types, strings['node_type']]),
+            dtype=small_id_dtype
+        )'''
+        # Map string-valued node types to integer IDs
+        node_types = _create_id_map(
+            pd.concat([strings['node_type'], pd.Series(['tag'])]),
             dtype=small_id_dtype
         )
 
@@ -1278,6 +1291,9 @@ class Shorthand:
                 subset=list_mode_subset,
                 columns=['entry_csv_row', 'string_id', 'link_type_id']
             )
+            hashed_srcs = pd.util.hash_pandas_object(sources, index=False)
+            sources = sources.loc[~hashed_srcs.duplicated()]
+
             targets = _get_link_component_string_ids(
                 prefix_pairs,
                 data,
@@ -1286,6 +1302,9 @@ class Shorthand:
                 subset=list_mode_subset,
                 columns=['entry_csv_row', 'string_id', 'item_list_position']
             )
+            hashed_tgts = pd.util.hash_pandas_object(targets, index=False)
+            targets = targets.loc[~hashed_tgts.duplicated()]
+
             references = _get_link_component_string_ids(
                 prefix_pairs,
                 data,
@@ -1294,9 +1313,17 @@ class Shorthand:
                 subset=list_mode_subset,
                 columns=['entry_csv_row', 'string_id']
             )
+            hashed_refs = pd.util.hash_pandas_object(references, index=False)
+            references = references.loc[~hashed_refs.duplicated()]
 
             other_links = sources.merge(targets, on='entry_csv_row')
-            other_links = other_links.merge(references, on='entry_csv_row')
+            # other_links = other_links.merge(references, on='entry_csv_row')
+            other_links['ref_string_id'] = other_links['entry_csv_row'].map(
+                pd.Series(
+                    references['ref_string_id'].array,
+                    index=references['entry_csv_row'].array
+                )
+            )
 
             one_to_one_links = bg.util.normalize_types(
                 one_to_one_links,
@@ -1409,15 +1436,6 @@ class Shorthand:
         Extract tag strings and create links between strings and tags.
         ***********************************************************'''
 
-        # Add node type for tags if it doesn't already exist
-        if 'tag' not in node_types:
-            index = pd.Series(
-                node_types.index.max() + 1,
-                dtype=node_types.index.dtype
-            )
-            new_type = pd.Series('tag', index=index)
-            node_types = pd.concat([node_types, new_type])
-
         # Cache the node type ID for tag strings
         tag_node_type_id = node_types.loc[node_types == 'tag'].index[0]
 
@@ -1527,6 +1545,8 @@ class Shorthand:
                 list_pos.loc[list_pos_but_no_tags]
             ])
 
+        links = links.drop('list_position', axis='columns')
+
         # Convert the space-delimited tag strings to lists of strings
         link_tags = link_tags.str.split().explode()
 
@@ -1567,34 +1587,79 @@ class Shorthand:
         Done with tags.
         ************'''
 
-        # Mutate entry prefix and item label maps into string-valued
-        # series with integer indexes
-        entry_prefix_id_map = pd.Series(
-            entry_prefix_id_map.index,
-            index=entry_prefix_id_map
-        )
-        item_label_id_map = pd.Series(
-            item_label_id_map.index,
-            index=item_label_id_map
+        tn = bg.TextNet()
+
+        tn.strings = strings
+        tn.reset_strings_dtypes()
+
+        tn.node_types = pd.DataFrame(columns=tn._node_types_dtypes.keys())
+        tn.node_types['node_type'] = node_types.array
+        tn.node_types['null_type'] = False
+        type_is_null = (tn.node_types['node_type'] == na_node_type)
+        tn.node_types.loc[type_is_null, 'null_type'] = True
+        tn.node_types['has_metadata'] = False
+        tn.reset_node_types_dtypes()
+
+        input_string_id = tn.insert_string(
+            input_string,
+            input_node_type,
+            add_node_type=True
         )
 
-        return bg.ParsedShorthand(
-            strings=strings,
-            links=links,
-            link_tags=link_tags,
-            node_types=node_types,
-            link_types=link_types,
-            entry_prefixes=entry_prefix_id_map,
-            item_labels=item_label_id_map,
-            item_separator=item_separator,
-            default_entry_prefix=default_entry_prefix,
-            space_char=space_char,
-            comment_char=comment_char,
-            na_string_values=na_string_values,
-            na_node_type=na_node_type,
-            syntax_case_sensitive=self.syntax_case_sensitive,
-            allow_redundant_items=self.allow_redundant_items
+        links['inp_string_id'] = input_string_id
+
+        tn.link_types = pd.DataFrame(columns=tn._link_types_dtypes.keys())
+        tn.link_types['link_type'] = link_types.array
+        tn.link_types['null_type'] = False
+        tn.reset_link_types_dtypes()
+
+        tn.assertions = links
+        tn.reset_assertions_dtypes()
+
+        tagged_link_type_id = tn.id_lookup('link_types', 'tagged')
+        if tagged_link_type_id not in tn.assertions['link_type_id'].array:
+            tn.link_types = tn.link_types.query('link_type != "tagged"')
+
+        tn.assertion_tags = link_tags
+        tn.assertion_tags = tn.assertion_tags.rename(
+            columns={'link_id': 'assertion_id'}
         )
+        tn.reset_assertion_tags_dtypes()
+
+        entry_prefixes_string_id = tn.insert_string(
+            str(list(entry_prefix_id_map.index)),
+            '_literal_python',
+            add_node_type=True
+        )
+        entry_prefixes_link_type_id = tn.insert_link_type(
+            'shorthand_entry_prefixes'
+        )
+
+        tn.insert_assertion(
+            input_string_id,
+            input_string_id,
+            entry_prefixes_string_id,
+            input_string_id,
+            entry_prefixes_link_type_id
+        )
+
+        item_labels_string_id = tn.insert_string(
+            str(list(item_label_id_map.index)),
+            '_literal_python'
+        )
+        item_labels_link_type_id = tn.insert_link_type(
+            'shorthand_item_labels'
+        )
+
+        tn.insert_assertion(
+            input_string_id,
+            input_string_id,
+            item_labels_string_id,
+            input_string_id,
+            item_labels_link_type_id
+        )
+
+        return tn
 
     def parse_text(
         self,
@@ -1604,6 +1669,8 @@ class Shorthand:
         space_char,
         na_string_values,
         na_node_type,
+        input_string,
+        input_node_type,
         skiprows=0,
         comment_char='#',
         fill_cols='left_entry',
@@ -1611,7 +1678,7 @@ class Shorthand:
         big_id_dtype=pd.Int32Dtype(),
         small_id_dtype=pd.Int8Dtype(),
         list_position_base=1,
-        s_d_delimiter='_'
+        s_d_delimiter='_',
     ):
         ####################
         # Validate arguments
@@ -1683,6 +1750,8 @@ class Shorthand:
             space_char,
             na_string_values,
             na_node_type,
+            input_string,
+            input_node_type,
             skiprows,
             comment_char,
             fill_cols,
@@ -1695,112 +1764,142 @@ class Shorthand:
 
         # Read input text from temp file
         with open(filepath_or_buffer, 'r') as f:
-            new_string = f.read()
+            full_text_string = f.read()
 
-        if hash(new_string) != input_hash:
+        if hash(full_text_string) != input_hash:
             raise RuntimeError('input text was modified during parsing')
 
         # Delete the temp file if it exists
         Path.unlink(Path('temp.shorthand'), missing_ok=True)
 
-        # Build an input_text row for the strings frame
-        txt_node_type_id = parsed.id_lookup('node_types', 'shorthand_text')
-        new_string = {
-            'string': new_string,
-            'node_type_id': txt_node_type_id
-        }
-        new_string = bg.util.normalize_types(
-            new_string,
-            parsed.strings
+        '''
+        SWITCHING TO LITERAL NODE TYPE
+        full_txt_string_id = parsed.insert_string(
+            full_text_string,
+            'shorthand_text',
+            add_node_type=True
         )
 
-        # Insert a strings row for the input text
-        parsed.strings = pd.concat([parsed.strings, new_string])
+        call_string_id = parsed.id_lookup('strings', input_string)
+        entry_syntax_string_id = parsed.insert_string(
+            self.entry_syntax,
+            'shorthand_entry_syntax',
+            add_node_type=True
+        )
 
-        input_text_string_id = parsed.strings.index[-1]
+        requires_link_type_id = parsed.insert_link_type('requires')
 
-        # Insert a strings row for the current function
-        func_node_type_id = parsed.id_lookup('node_types', 'python_function')
-        new_string = {
-            'string': 'Shorthand.parse_text',
-            'node_type_id': func_node_type_id
-        }
-        new_string = bg.util.normalize_types(new_string, parsed.strings)
-        parsed.strings = pd.concat([parsed.strings, new_string])
+        parsed.insert_assertion(
+            call_string_id,
+            full_txt_string_id,
+            entry_syntax_string_id,
+            call_string_id,
+            requires_link_type_id
+        )
+        parsed.insert_assertion(
+            call_string_id,
+            call_string_id,
+            entry_syntax_string_id,
+            call_string_id,
+            requires_link_type_id
+        )'''
 
-        parse_function_string_id = parsed.strings.index[-1]
+        # Create a string for the data and a link from the input string
+        call_string_id = parsed.id_lookup('strings', input_string)
+        full_txt_string_id = parsed.insert_string(
+            full_text_string,
+            '_literal_csv',
+            add_node_type=True
+        )
+        shorthand_data_link_id = parsed.insert_link_type('shorthand_data')
+        call_string_id = parsed.id_lookup('strings', input_string)
+        parsed.insert_assertion(
+            call_string_id,
+            call_string_id,
+            full_txt_string_id,
+            call_string_id,
+            shorthand_data_link_id
+        )
 
-        # Insert a strings row for the entry syntax
-        entry_syntax_node_type_id = parsed.id_lookup(
-            'node_types',
+        # Create a string for the entry syntax and a link from the
+        # input string
+        entry_syntax_string_id = parsed.insert_string(
+            self.entry_syntax,
+            '_literal_csv'
+        )
+        shorthand_entry_syntax_link_id = parsed.insert_link_type(
             'shorthand_entry_syntax'
         )
-        new_string = {
-            'string': self.entry_syntax,
-            'node_type_id': entry_syntax_node_type_id
-        }
-        new_string = bg.util.normalize_types(new_string, parsed.strings)
-        parsed.strings = pd.concat([parsed.strings, new_string])
-
-        # Insert a link between the input text and the entry syntax
-
-        new_link = {
-            'src_string_id': input_text_string_id,
-            'tgt_string_id': new_string.index[0],
-            'ref_string_id': parse_function_string_id,
-            'link_type_id': parsed.id_lookup('link_types', 'requires')
-        }
-        new_link = bg.util.normalize_types(new_link, parsed.links)
-        parsed.links = pd.concat([parsed.links, new_link])
+        parsed.insert_assertion(
+            call_string_id,
+            call_string_id,
+            entry_syntax_string_id,
+            call_string_id,
+            shorthand_entry_syntax_link_id
+        )
 
         try:
-            assert self.link_syntax
-            # If we were given a link syntax, create a row for it in the
-            # strings frame and create a link between the input text
-            # and the link syntax
-            link_syntax_node_type_id = parsed.id_lookup(
-                'node_types',
-                'shorthand_link_syntax'
-            )
-            new_string = {
-                'string': self.link_syntax,
-                'node_type_id': link_syntax_node_type_id
-            }
-            new_string = bg.util.normalize_types(
-                new_string,
-                parsed.strings
-            )
-            parsed.strings = pd.concat(
-                [parsed.strings, new_string]
+            self.link_syntax
+
+            '''
+            SWITCHING TO LITERAL NODE TYPE
+            link_syntax_string_id = parsed.insert_string(
+                self.link_syntax,
+                'shorthand_link_syntax',
+                add_node_type=True
             )
 
-            new_link = {
-                'src_string_id': input_text_string_id,
-                'tgt_string_id': new_string.index[0],
-                'ref_string_id': parse_function_string_id,
-                'link_type_id': parsed.id_lookup('link_types', 'requires')
-            }
-            new_link = bg.util.normalize_types(new_link, parsed.links)
-            parsed.links = pd.concat([parsed.links, new_link])
+            parsed.insert_assertion(
+                call_string_id,
+                full_txt_string_id,
+                link_syntax_string_id,
+                call_string_id,
+                requires_link_type_id
+            )
+            parsed.insert_assertion(
+                call_string_id,
+                call_string_id,
+                link_syntax_string_id,
+                call_string_id,
+                requires_link_type_id
+            )'''
+            # Create a string for the entry syntax and a link from the
+            # input string
+            link_syntax_string_id = parsed.insert_string(
+                self.link_syntax,
+                '_literal_csv'
+            )
+            shorthand_link_syntax_link_id = parsed.insert_link_type(
+                'shorthand_link_syntax'
+            )
+            parsed.insert_assertion(
+                call_string_id,
+                call_string_id,
+                link_syntax_string_id,
+                call_string_id,
+                shorthand_link_syntax_link_id
+            )
 
         except AttributeError:
             pass
 
-        # Links whose reference string ID is missing should have the
+        # Assertions whose reference string ID is missing should have the
         # input file as their reference string
-        ref_isna = parsed.links['ref_string_id'].isna()
-        parsed.links.loc[ref_isna, 'ref_string_id'] = input_text_string_id
+        ref_isna = parsed.assertions['ref_string_id'].isna()
+        parsed.assertions.loc[ref_isna, 'ref_string_id'] = full_txt_string_id
 
-        # Links whose source string ID is missing should have the input
+        # Assertions whose source string ID is missing should have the input
         # file as their source string
-        src_isna = parsed.links['src_string_id'].isna()
-        parsed.links.loc[src_isna, 'src_string_id'] = input_text_string_id
+        src_isna = parsed.assertions['src_string_id'].isna()
+        parsed.assertions.loc[src_isna, 'src_string_id'] = full_txt_string_id
 
         return parsed
 
     def parse_items(
         self,
         data,
+        input_string,
+        input_node_type,
         space_char,
         na_string_values,
         na_node_type,
@@ -2046,7 +2145,11 @@ class Shorthand:
 
         # These link types are required to complete linking operations
         # later
+        '''
+        SWITCHING TO LITERAL NODE TYPE
         link_types = pd.Series(['entry', 'tagged', 'requires'])
+        '''
+        link_types = pd.Series(['entry', 'tagged'])
 
         # Map string-valued link types to integer IDs
         link_types = _create_id_map(
@@ -2144,6 +2247,8 @@ class Shorthand:
         )
         data = data.rename(columns={'string': 'string_id'})
 
+        '''
+        SWITCHING TO LITERAL NODE TYPE
         # These node types will be required later
         node_types = pd.Series([
             'items_text',
@@ -2155,6 +2260,11 @@ class Shorthand:
         # Map string-valued node types to integer IDs
         node_types = _create_id_map(
             pd.concat([node_types, strings['node_type']]),
+            dtype=small_id_dtype
+        )'''
+        # Map string-valued node types to integer IDs
+        node_types = _create_id_map(
+            pd.concat([strings['node_type'], pd.Series(['tag'])]),
             dtype=small_id_dtype
         )
 
@@ -2294,6 +2404,8 @@ class Shorthand:
             index=item_label_id_map
         )
 
+        '''
+        SWITCHING TO LITERAL NODE TYPE
         parsed = bg.ParsedShorthand(
             strings=strings,
             links=links,
@@ -2310,14 +2422,54 @@ class Shorthand:
             na_node_type=na_node_type,
             syntax_case_sensitive=self.syntax_case_sensitive,
             allow_redundant_items=self.allow_redundant_items
+        )'''
+
+        tn = bg.TextNet()
+
+        tn.strings = strings
+        tn.reset_strings_dtypes()
+
+        tn.node_types = pd.DataFrame(columns=tn._node_types_dtypes.keys())
+        tn.node_types['node_type'] = node_types.array
+        tn.node_types['null_type'] = False
+        type_is_null = (tn.node_types['node_type'] == na_node_type)
+        tn.node_types.loc[type_is_null, 'null_type'] = True
+        tn.reset_node_types_dtypes()
+
+        input_string_id = tn.insert_string(
+            input_string,
+            input_node_type,
+            add_node_type=True
         )
 
+        links['inp_string_id'] = input_string_id
+
+        tn.link_types = pd.DataFrame(columns=tn._link_types_dtypes.keys())
+        tn.link_types['link_type'] = link_types.array
+        tn.link_types['null_type'] = False
+        tn.reset_link_types_dtypes()
+
+        tn.assertions = links
+        tn.reset_assertions_dtypes()
+
+        tagged_link_type_id = tn.id_lookup('link_types', 'tagged')
+        if tagged_link_type_id not in tn.assertions['link_type_id'].array:
+            tn.link_types = tn.link_types.query('link_type != "tagged"')
+
+        tn.assertion_tags = link_tags
+        tn.assertion_tags = tn.assertion_tags.rename(
+            columns={'link_id': 'assertion_id'}
+        )
+        tn.reset_assertion_tags_dtypes()
+
+        '''
+        SWITCHING TO LITERAL NODE TYPE
         # Concat all entries into a single string
-        entry_node_type_id = parsed.id_lookup('link_types', 'entry')
-        items_text = parsed.links.query(
+        entry_node_type_id = tn.id_lookup('link_types', 'entry')
+        items_text = tn.links.query(
             'link_type_id == @entry_node_type_id'
         )
-        items_text = parsed.strings.loc[items_text['tgt_string_id'], 'string']
+        items_text = tn.strings.loc[items_text['tgt_string_id'], 'string']
         items_text = '\n'.join(items_text)
 
         # Insert a strings row for the items text
@@ -2364,6 +2516,12 @@ class Shorthand:
         new_link = bg.util.normalize_types(new_link, parsed.links)
         parsed.links = pd.concat([parsed.links, new_link])
 
+        parsed.insert_string(
+            self.entry_syntax,
+            'shorthand_entry_syntax',
+            add_node_type=True
+        )
+
         # Links whose reference string ID is missing should have the
         # items text as their reference string
         ref_isna = parsed.links['ref_string_id'].isna()
@@ -2374,4 +2532,56 @@ class Shorthand:
         src_isna = parsed.links['src_string_id'].isna()
         parsed.links.loc[src_isna, 'src_string_id'] = items_text_string_id
 
-        return parsed
+        return parsed'''
+
+        # Concat all entries into a single string and insert it
+        entry_node_type_id = tn.id_lookup('link_types', 'entry')
+        items_csv = tn.assertions.query(
+            'link_type_id == @entry_node_type_id'
+        )
+        items_csv = tn.strings.loc[items_csv['tgt_string_id'], 'string']
+        items_csv = '\n'.join(items_csv)
+        items_csv_string_id = tn.insert_string(
+            items_csv,
+            '_literal_csv',
+            add_node_type=True
+        )
+
+        # create a link between the input string and the items csv
+        items_csv_link_type_id = tn.insert_link_type('items_csv')
+        tn.insert_assertion(
+            input_string_id,
+            input_string_id,
+            items_csv_string_id,
+            input_string_id,
+            items_csv_link_type_id
+        )
+
+        # Create a string for the entry syntax and a link from the
+        # input string
+        entry_syntax_string_id = tn.insert_string(
+            self.entry_syntax,
+            '_literal_csv'
+        )
+        shorthand_entry_syntax_link_id = tn.insert_link_type(
+            'shorthand_entry_syntax'
+        )
+        tn.insert_assertion(
+            input_string_id,
+            input_string_id,
+            entry_syntax_string_id,
+            input_string_id,
+            shorthand_entry_syntax_link_id
+        )
+
+        # Assertions whose reference string ID is missing should have the
+        # items text as their reference string
+        ref_isna = tn.assertions['ref_string_id'].isna()
+        tn.assertions.loc[ref_isna, 'ref_string_id'] = items_csv_string_id
+
+        # Assertions whose source string ID is missing should have the items
+        # text as their source string
+        src_isna = tn.assertions['src_string_id'].isna()
+        tn.assertions.loc[src_isna, 'src_string_id'] = items_csv_string_id
+
+        return tn

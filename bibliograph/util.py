@@ -789,3 +789,96 @@ def set_string_dtype(df):
             )
         )
     )
+
+
+def map_indexes(candidate_values, new_values, existing_values):
+
+    new_value_id_map = non_intersecting_sequence(
+        new_values.index,
+        existing_values.index
+    )
+    new_value_id_map = pd.Series(
+        new_value_id_map,
+        index=new_values.index.array
+    )
+
+    common_values = candidate_values.loc[
+        ~candidate_values.index.isin(new_values.index)
+    ]
+    hashed_common_values = pd.util.hash_pandas_object(
+        common_values,
+        index=False
+    )
+    hashed_existing_values = pd.util.hash_pandas_object(
+        existing_values,
+        index=False
+    )
+
+    common_value_id_map = hashed_common_values.map(pd.Series(
+        hashed_existing_values.index.array,
+        index=hashed_existing_values.array
+    ))
+
+    full_obj_id_map = pd.concat([common_value_id_map, new_value_id_map])
+
+    return common_value_id_map, new_value_id_map, full_obj_id_map.sort_index()
+
+
+def map_string_ids(obj, existing_obj):
+
+    if 'nodes' not in dir(obj) or obj.nodes is None:
+        obj_typed_values = obj.strings[['string', 'node_type_id']]
+    else:
+        obj_types = obj.strings['node_id'].map(obj.nodes['node_type_id'])
+        obj_typed_values = pd.concat(
+            [obj.strings['string'], obj_types.rename('node_type_id')],
+            axis='columns'
+        )
+
+    if 'nodes' not in dir(obj) or obj.nodes is None:
+        existing_obj_typed_values = existing_obj.strings[
+            ['string', 'node_type_id']
+        ]
+    else:
+        existing_obj_types = existing_obj.strings['node_id'].map(
+            existing_obj.nodes['node_type_id']
+        )
+        existing_obj_typed_values = pd.concat(
+            [
+                existing_obj.strings['string'],
+                existing_obj_types.rename('node_type_id')
+            ],
+            axis='columns'
+        )
+
+    new_typed_values = get_new_typed_values(
+        obj_typed_values,
+        existing_obj_typed_values,
+        'string',
+        'node_type_id'
+    )
+
+    return map_indexes(
+        obj_typed_values,
+        new_typed_values,
+        existing_obj_typed_values
+    )
+
+
+def map_assertion_ids(obj, existing_obj):
+
+    columns = [
+        label for label in obj.assertions.columns if label.endswith('_id')
+    ]
+
+    new_values = get_new_typed_values(
+        obj[columns],
+        existing_obj[columns],
+        columns
+    )
+
+    return map_indexes(
+        obj[columns],
+        existing_obj[columns],
+        new_values
+    )

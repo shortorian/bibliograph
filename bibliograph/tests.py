@@ -1,6 +1,5 @@
 import bibliograph as bg
 import pandas as pd
-from bibtexparser.bparser import BibTexParser
 from io import StringIO
 
 
@@ -107,7 +106,7 @@ def test_manual_annotation_assertions_column_nan_states():
     assert tn.assertions['date_modified'].isna().all()
 
 
-def test_manual_annotation_num_strings_is_65():
+def test_manual_annotation_num_strings_is_74():
 
     tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
@@ -123,7 +122,7 @@ def test_manual_annotation_num_strings_is_65():
         comment_char='#'
     )
 
-    assert len(tn.strings) == 64
+    assert len(tn.strings) == 74
 
 
 def test_manual_annotation_node_types_with_single_strings():
@@ -143,18 +142,14 @@ def test_manual_annotation_node_types_with_single_strings():
     )
 
     single_string_node_types = [
-        'acknowledgement',
-        'affiliation',
-        'shorthand_text',
-        'shorthand_entry_syntax',
-        'shorthand_link_syntax'
+        'agreement', 'affiliation', '_python_function_call'
     ]
 
     counts = tn.resolve_strings()['node_type'].value_counts()
     assert counts.loc[counts == 1].index.isin(single_string_node_types).all()
 
 
-def test_manual_annotation_node_type_0_is_shorthand_text():
+def test_manual_annotation_table_dtypes():
 
     tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
@@ -170,12 +165,24 @@ def test_manual_annotation_node_type_0_is_shorthand_text():
         comment_char='#'
     )
 
-    shorthand_text_node_type_id = tn.id_lookup('node_types', 'shorthand_text')
+    table_names = tn._node_side_tables + tn._string_side_tables
 
-    assert (shorthand_text_node_type_id == 0)
+    # edge_tags is empty
+    table_names = [n for n in table_names if n != 'edge_tags']
+
+    actual_dtypes = {
+        name: dict(tn.__getattr__(name).dtypes) for name in table_names
+    }
+    expected_dtypes = {
+        name: tn.__getattr__('_{}_dtypes'.format(name)) for name in table_names
+    }
+
+    assert all([
+        actual_dtypes[name] == expected_dtypes[name] for name in table_names
+    ])
 
 
-def test_manual_annotation_single_string_has_node_type_shorthand_text():
+def test_manual_annotation_index_dtypes():
 
     tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
@@ -191,11 +198,24 @@ def test_manual_annotation_single_string_has_node_type_shorthand_text():
         comment_char='#'
     )
 
-    shorthand_text_string = tn.resolve_strings().query(
-        'node_type == "shorthand_text"'
-    )
+    table_names = tn._node_side_tables + tn._string_side_tables
 
-    assert (shorthand_text_string.node_type.squeeze() == "shorthand_text")
+    # edge_tags is empty
+    table_names = [n for n in table_names if n != 'edge_tags']
+
+    actual_index_dtypes = {
+        name: tn.__getattr__(name).index.dtype
+        for name in table_names
+    }
+    expected_index_dtypes = {
+        name: tn.__getattr__('_{}_index_dtype'.format(name))
+        for name in table_names
+    }
+
+    assert all([
+        actual_index_dtypes[name] == expected_index_dtypes[name]
+        for name in table_names
+    ])
 
 
 def test_manual_annotation_shorthand_text_string_startswith():
@@ -214,12 +234,12 @@ def test_manual_annotation_shorthand_text_string_startswith():
         comment_char='#'
     )
 
-    shorthand_text_string = tn.resolve_strings().query(
-        'node_type == "shorthand_text"'
+    shorthand_text_string = tn.resolve_assertions(link_type='shorthand_data')
+    shorthand_text_string = bg.util.get_single_value(
+        shorthand_text_string,
+        'tgt_string'
     )
-    assert (shorthand_text_string.string.squeeze().startswith(
-        'This is stuff shorthand ignores'
-    ))
+    assert shorthand_text_string.startswith('This is stuff shorthand ignores')
 
 
 def test_aliasing_num_case_sensitive_actor_nodes_is_5():
@@ -373,6 +393,7 @@ def test_aliasing_node_3_work_bams_values():
 
 
 def test_aliasing_node_1_actor_asmith_values():
+
     aliases_dict = {
         'actor': 'bibliograph/test_data/aliases_actor.csv',
         'work': 'bibliograph/test_data/aliases_work.csv'
@@ -402,6 +423,7 @@ def test_aliasing_node_1_actor_asmith_values():
 
 
 def test_aliasing_node_2_actor_bwu_values():
+
     aliases_dict = {
         'actor': 'bibliograph/test_data/aliases_actor.csv',
         'work': 'bibliograph/test_data/aliases_work.csv'
@@ -433,6 +455,7 @@ def test_aliasing_node_2_actor_bwu_values():
 
 
 def test_aliasing_node_0_actor_nasa_values():
+
     aliases_dict = {
         'actor': 'bibliograph/test_data/aliases_actor.csv',
         'work': 'bibliograph/test_data/aliases_work.csv'
@@ -466,7 +489,7 @@ def test_aliasing_node_0_actor_nasa_values():
     assert (strings_with_node_0 == node_0_aliases).all().all()
 
 
-def test_auto_aliasing_lemonem_and_personso_assertions():
+def test_auto_aliasing_lemonem_personso_yyy_assertions():
 
     aliases_dict = {
         'actor': 'bibliograph/test_data/aliases_actor.csv',
@@ -492,40 +515,40 @@ def test_auto_aliasing_lemonem_and_personso_assertions():
         comment_char='#',
     )
 
-    input_string = (
-        "bibliograph.core.slurp_shorthand(**{'shorthand_fname': "
-        "'bibliograph/test_data/shorthand_for_auto_aliasing.shnd', "
-        "'entry_syntax_fname': "
-        "'bibliograph/resources/default_entry_syntax.csv', "
-        "'link_syntax_fname': 'bibliograph/resources/default_link_syntax.csv',"
-        " 'syntax_case_sensitive': False, 'allow_redundant_items': False, "
-        "'aliases_dict': {'actor': 'bibliograph/test_data/aliases_actor.csv', "
-        "'work': 'bibliograph/test_data/aliases_work.csv'}, "
-        "'aliases_case_sensitive': False, 'automatic_aliasing': True, "
-        "'link_constraints_fname': "
-        "'bibliograph/resources/default_link_constraints.csv', "
-        "'links_excluded_from_edges': None, 'item_separator': '__', "
-        "'space_char': '|', 'na_string_values': '!', 'na_node_type': "
-        "'missing', 'default_entry_prefix': 'wrk', 'comment_char': '#'})"
-    )
-
-    correct_assertions = pd.DataFrame(
+    manual_assertion_index = [79, 81]
+    correct_manual_aliases = pd.DataFrame(
         {
-            'inp_string': input_string,
-            'src_string': ['margaret lemone', 's. o. person'],
-            'tgt_string': ['lemonem', 'personso'],
+            'src_string': ['soperson', 'beth wu'],
+            'tgt_string': ['s. o. person', 'Elizabeth Wu'],
             'link_type': 'alias',
-            'inp_node_type': 'python_function',
             'src_node_type': 'actor',
             'tgt_node_type': 'actor',
-            'ref_node_type': 'alias_reference'
+            'ref_node_type': '_literal_csv'
         },
-        index=pd.Index([76, 79]).astype(tn.big_id_dtype)
+        index=pd.Index(manual_assertion_index).astype(tn.big_id_dtype)
     )
 
+    auto_assertion_index = [92, 95, 99]
+    correct_automatic_aliases = pd.DataFrame(
+        {
+            'src_string': ['margaret lemone', 's. o. person', 'doi:yyy'],
+            'tgt_string': ['lemonem', 'personso', 'yyy'],
+            'link_type': 'alias',
+            'src_node_type': ['actor', 'actor', 'identifier'],
+            'tgt_node_type': ['actor', 'actor', 'identifier'],
+            'ref_node_type': '_python_function_call'
+        },
+        index=pd.Index(auto_assertion_index).astype(tn.big_id_dtype)
+    )
+
+    correct_assertions = pd.concat([
+        correct_manual_aliases,
+        correct_automatic_aliases
+    ])
+
     assertion_selection = tn.resolve_assertions().loc[
-        correct_assertions.index,
-        correct_assertions.columns
+        manual_assertion_index + auto_assertion_index,
+        correct_manual_aliases.columns
     ]
 
     assert (assertion_selection == correct_assertions).all().all()
@@ -557,16 +580,13 @@ def test_auto_aliasing_by_stitle_vol_pg_link_constraints():
         comment_char='#',
     )
 
-    node_10_aliases = [
+    node_6_aliases = [
         'asmith_bwu__1999__bams__101__803__xxx',
         'smitha_wub__1999__bams__101__803'
     ]
-    strings_with_node_10 = tn.strings.loc[
-        tn.strings['node_id'] == 10,
-        'string'
-    ]
+    strings_with_node_6 = tn.get_strings_by_node_id(6)['string']
 
-    assert (strings_with_node_10 == node_10_aliases).all().all()
+    assert (strings_with_node_6 == node_6_aliases).all().all()
 
 
 def test_auto_aliasing_by_doi_link_constraints():
@@ -595,25 +615,16 @@ def test_auto_aliasing_by_doi_link_constraints():
         comment_char='#',
     )
 
-    node_14_aliases = [
+    node_5_aliases = [
         'Alice Smith_Elizabeth Wu__1998__bams__100__42__yyy',
         'smitha_wub__1998__!__!__!__doi:yyy'
     ]
-    strings_with_node_14 = tn.strings.loc[
-        tn.strings['node_id'] == 14,
-        'string'
-    ]
+    strings_with_node_5 = tn.get_strings_by_node_id(5)['string']
 
-    assert (strings_with_node_14 == node_14_aliases).all().all()
+    assert (strings_with_node_5 == node_5_aliases).all().all()
 
 
 def test_s_d_strings_subset_same_as_shnd_strings_subset():
-
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
-        link_syntax="bibliograph/resources/default_link_syntax.csv",
-        syntax_case_sensitive=False
-    )
 
     shorthand_text = (
         'left_entry, right_entry, link_tags_or_override, reference\n'
@@ -631,8 +642,11 @@ def test_s_d_strings_subset_same_as_shnd_strings_subset():
         'lt__cited LinkTag'
     )
 
-    parsed_shnd_sources = s.parse_text(
+    shnd_tn = bg.slurp_shorthand(
         StringIO(shorthand_text),
+        entry_syntax_fname="bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
         item_separator='__',
         default_entry_prefix='wrk',
         space_char='|',
@@ -641,8 +655,11 @@ def test_s_d_strings_subset_same_as_shnd_strings_subset():
         comment_char='#'
     )
 
-    parsed_s_d_sources = s.parse_text(
+    s_d_tn = bg.slurp_shorthand(
         StringIO(self_descriptive),
+        entry_syntax_fname="bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
         item_separator='__',
         default_entry_prefix='wrk',
         space_char='|',
@@ -659,42 +676,44 @@ def test_s_d_strings_subset_same_as_shnd_strings_subset():
         'work'
     ]
 
-    shnd_strings = parsed_shnd_sources.resolve_strings()
+    shnd_strings = shnd_tn.resolve_strings()
     shnd_strings = shnd_strings.loc[
         ~shnd_strings['node_type'].isin(node_types)
     ]
     shnd_strings = shnd_strings.loc[shnd_strings['string'] != '1']
     shnd_strings = shnd_strings.sort_values(by='string').reset_index(drop=True)
 
-    s_d_strings = parsed_s_d_sources.resolve_strings()
+    s_d_strings = s_d_tn.resolve_strings()
     s_d_strings = s_d_strings.loc[~s_d_strings['node_type'].isin(node_types)]
     s_d_strings = s_d_strings.sort_values(by='string').reset_index(drop=True)
+
+    q = '({})'.format(') & ('.join([
+        '~node_type.str.contains("literal")',
+        '~node_type.str.contains("python")'
+    ]))
+
+    shnd_strings = shnd_strings.query(q)[['string', 'node_type']]
+    s_d_strings = s_d_strings.query(q)[['string', 'node_type']]
 
     assert (shnd_strings == s_d_strings).all().all()
 
 
 def test_bibtex_identifier_parsing():
 
-    bibtex_parser = BibTexParser(common_strings=True)
-    bibtex_fname = "bibliograph/test_data/bibtex_test_data_short.bib"
-    with open(bibtex_fname, encoding='utf8') as f:
-        bibdatabase = bibtex_parser.parse_file(f)
-
-    data = pd.DataFrame(bibdatabase.entries)
-
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_bibtex_syntax.csv",
-        syntax_case_sensitive=False
-    )
-
-    parsed = s.parse_items(
-        data,
+    tn = bg.slurp_bibtex(
+        "bibliograph/test_data/bibtex_test_data_short.bib",
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        syntax_case_sensitive=False,
         space_char='|',
         na_string_values='!',
-        na_node_type='missing'
+        na_node_type='missing',
     )
 
-    parsed_identifiers = parsed.strings.query('node_type_id == 8')
+    identifier_type_id = tn.id_lookup('node_types', 'identifier')
+    identifier_nodes = tn.nodes.query('node_type_id == @identifier_type_id')
+    parsed_identifiers = tn.strings.query(
+        'node_id.isin(@identifier_nodes.index)'
+    )
 
     check = pd.Series([
         '10.1038/194638b0',
@@ -711,51 +730,26 @@ def test_bibtex_identifier_parsing():
     assert (check == parsed_identifiers['string'].array).all()
 
 
-def test_parsed_bibtex_items_resolve_links_has_no_nans():
-
-    bibtex_parser = BibTexParser(common_strings=True)
-    bibtex_test_data_fname = "bibliograph/test_data/bibtex_test_data_short.bib"
-    with open(bibtex_test_data_fname, encoding='utf8') as f:
-        bibdatabase = bibtex_parser.parse_file(f)
-
-    data = pd.DataFrame(bibdatabase.entries)
-
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_bibtex_syntax.csv",
-        syntax_case_sensitive=False
-    )
-
-    parsed = s.parse_items(
-        data.iloc[:4],
-        space_char='|',
-        na_string_values='!',
-        na_node_type='missing'
-    )
-
-    assert (~parsed.resolve_links().isna()).any().any()
-
-
 def test_single_column_wrk_synthesis():
 
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
-        link_syntax="bibliograph/resources/default_link_syntax.csv",
-        syntax_case_sensitive=False
-    )
-
-    parsed = s.parse_text(
+    tn = bg.slurp_single_column(
         'bibliograph/test_data/single_column.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        syntax_case_sensitive=False,
         item_separator='__',
         default_entry_prefix='wrk',
         space_char='|',
         na_string_values=['!', 'x'],
         na_node_type='missing',
         skiprows=0,
-        comment_char='#',
-        drop_na=False
+        comment_char='#'
     )
 
-    synthesized = parsed.synthesize_shorthand_entries('wrk', fill_spaces=True)
+    synthesized = tn.synthesize_shorthand_entries(
+        node_type='work',
+        fill_spaces=True,
+        hide_default_entry_prefixes=True
+    )
 
     check = pd.Series([
         'asmith_bwu__1999__s_bams__101__803__xxx',
@@ -766,49 +760,47 @@ def test_single_column_wrk_synthesis():
         'asmith_bwu__2008__s_bams__110__1__zzz'
     ])
 
-    assert (check == synthesized).all()
+    assert (check == synthesized.reset_index(drop=True)).all()
 
 
 def test_manual_annotation_note_synthesis():
 
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
-        link_syntax="bibliograph/resources/default_link_syntax.csv",
-        syntax_case_sensitive=False
-    )
-
-    parsed = s.parse_text(
+    tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        automatic_aliasing=True,
         item_separator='__',
-        default_entry_prefix='wrk',
         space_char='|',
-        na_string_values=['!', 'x'],
+        na_string_values='!',
         na_node_type='missing',
+        default_entry_prefix='wrk',
         skiprows=2,
         comment_char='#'
     )
 
-    synthesized = parsed.synthesize_shorthand_entries(entry_node_type='note')
+    synthesized = tn.synthesize_shorthand_entries(node_type='note')
 
-    check = pd.Series([
-        'this is an article I made up for testing',
-        'here\'s a note with an escaped\\__item separator and some '
-        '"quotation marks"'
-    ])
+    check = pd.Series(
+        [
+            'not__this is an article I made up for testing',
+            'not__here\'s a note with an escaped\\__item separator and '
+            'some "quotation marks"'
+        ],
+        index=synthesized.index
+    )
 
     assert (check == synthesized).all()
 
 
 def test_manual_annotation_wrk_synthesis():
 
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
-        link_syntax="bibliograph/resources/default_link_syntax.csv",
-        syntax_case_sensitive=False
-    )
-
-    parsed = s.parse_text(
+    tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
         item_separator='__',
         default_entry_prefix='wrk',
         space_char='|',
@@ -818,30 +810,109 @@ def test_manual_annotation_wrk_synthesis():
         comment_char='#'
     )
 
-    synthesized = parsed.synthesize_shorthand_entries('wrk', fill_spaces=True)
+    synthesized = tn.synthesize_shorthand_entries(
+        node_type='work',
+        hide_default_entry_prefixes=True,
+        fill_spaces=True
+    )
 
-    check = pd.Series([
-        'asmith_bwu__1999__s_bams__101__803__xxx',
-        'asmith_bwu__1998__s_bams__100__42__yyy',
-        'bjones__1975__s_jats__90__1__!',
-        'bwu__1989__t_long|title__x__80__!',
-        'Some|Author__1989__t_Title|With|\\#__x__x__!',
-        'asmith_bwu__2008__s_bams__110__1__zzz'
-    ])
+    check = pd.Series(
+        [
+            'asmith_bwu__1999__s_bams__101__803__xxx',
+            'asmith_bwu__1998__s_bams__100__42__yyy',
+            'bjones__1975__s_jats__90__1__!',
+            'bwu__1989__t_long|title__x__80__!',
+            'Some|Author__1989__t_Title|With|\\#__x__x__!',
+            'asmith_bwu__2008__s_bams__110__1__zzz'
+        ],
+        index=synthesized.index
+    )
 
     assert (check == synthesized).all()
 
 
-def test_parsed_manual_annotation_resolve_links_has_no_nans():
+def test_bibtex_input_uses_all_strings():
 
-    s = bg.Shorthand(
-        entry_syntax="bibliograph/resources/default_entry_syntax.csv",
-        link_syntax="bibliograph/resources/default_link_syntax.csv",
-        syntax_case_sensitive=False
+    tn = bg.slurp_bibtex(
+        "bibliograph/test_data/bibtex_test_data_short.bib",
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        syntax_case_sensitive=False,
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
     )
 
-    parsed = s.parse_text(
+    asserted_string_ids = tn.assertions[
+        [c for c in tn.assertions.columns if c.endswith('string_id')]
+    ]
+    asserted_string_ids = pd.Series(asserted_string_ids.stack().unique())
+    assertion_tag_string_ids = pd.Series(
+        tn.assertion_tags['tag_string_id'].unique()
+    )
+    used_string_ids = pd.concat([
+        asserted_string_ids,
+        assertion_tag_string_ids
+    ])
+    unused_strings = tn.strings.query('~index.isin(@used_string_ids)')
+
+    assert unused_strings.empty
+
+
+def test_bibtex_input_connects_all_non_tag_nodes():
+
+    tn = bg.slurp_bibtex(
+        "bibliograph/test_data/bibtex_test_data_short.bib",
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        syntax_case_sensitive=False,
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+    )
+
+    connected_node_ids = tn.edges[
+        [c for c in tn.edges.columns if c.endswith('node_id')]
+    ]
+    connected_node_ids = pd.Series(connected_node_ids.stack().unique())
+
+    tag_node_type_id = tn.id_lookup('node_types', 'tag')
+
+    q = '({})'.format(') & ('.join([
+        '~index.isin(@connected_node_ids)',
+        'node_type_id != @tag_node_type_id'
+    ]))
+
+    unconnected_nodes = tn.nodes.query(q)
+
+    assert unconnected_nodes.empty
+
+
+def test_bibtex_input_uses_all_types():
+
+    tn = bg.slurp_bibtex(
+        "bibliograph/test_data/bibtex_test_data_short.bib",
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        syntax_case_sensitive=False,
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+    )
+
+    unused_link_types = tn.link_types.query(
+        "~index.isin(@tn.assertions['link_type_id'])"
+    )
+    unused_node_types = tn.node_types.query(
+        "~index.isin(@tn.nodes['node_type_id'])"
+    )
+
+    assert unused_link_types.empty and unused_node_types.empty
+
+def test_manual_annotation_input_uses_all_strings():
+
+    tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
         item_separator='__',
         default_entry_prefix='wrk',
         space_char='|',
@@ -851,4 +922,430 @@ def test_parsed_manual_annotation_resolve_links_has_no_nans():
         comment_char='#'
     )
 
-    assert (~parsed.resolve_links().isna()).any().any()
+    asserted_string_ids = tn.assertions[
+        [c for c in tn.assertions.columns if c.endswith('string_id')]
+    ]
+    asserted_string_ids = pd.Series(asserted_string_ids.stack().unique())
+    assertion_tag_string_ids = pd.Series(
+        tn.assertion_tags['tag_string_id'].unique()
+    )
+    used_string_ids = pd.concat([
+        asserted_string_ids,
+        assertion_tag_string_ids
+    ])
+    unused_strings = tn.strings.query('~index.isin(@used_string_ids)')
+
+    assert unused_strings.empty
+
+
+def test_manual_annotation_input_connects_all_non_tag_nodes():
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        item_separator='__',
+        default_entry_prefix='wrk',
+        space_char='|',
+        na_string_values=['!', 'x'],
+        na_node_type='missing',
+        skiprows=2,
+        comment_char='#'
+    )
+
+    connected_node_ids = tn.edges[
+        [c for c in tn.edges.columns if c.endswith('node_id')]
+    ]
+    connected_node_ids = pd.Series(connected_node_ids.stack().unique())
+
+    tag_node_type_id = tn.id_lookup('node_types', 'tag')
+
+    q = '({})'.format(') & ('.join([
+        '~index.isin(@connected_node_ids)',
+        'node_type_id != @tag_node_type_id'
+    ]))
+
+    unconnected_nodes = tn.nodes.query(q)
+
+    assert unconnected_nodes.empty
+
+
+def test_manual_annotation_input_uses_all_types():
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        link_syntax_fname="bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        item_separator='__',
+        default_entry_prefix='wrk',
+        space_char='|',
+        na_string_values=['!', 'x'],
+        na_node_type='missing',
+        skiprows=2,
+        comment_char='#'
+    )
+
+    unused_link_types = tn.link_types.query(
+        "~index.isin(@tn.assertions['link_type_id'])"
+    )
+    unused_node_types = tn.node_types.query(
+        "~index.isin(@tn.nodes['node_type_id'])"
+    )
+
+    assert unused_link_types.empty and unused_node_types.empty
+
+
+def test_auto_aliasing_input_uses_all_strings():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_for_auto_aliasing.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        comment_char='#',
+    )
+
+    asserted_string_ids = tn.assertions[
+        [c for c in tn.assertions.columns if c.endswith('string_id')]
+    ]
+    asserted_string_ids = pd.Series(asserted_string_ids.stack().unique())
+    assertion_tag_string_ids = pd.Series(
+        tn.assertion_tags['tag_string_id'].unique()
+    )
+    used_string_ids = pd.concat([
+        asserted_string_ids,
+        assertion_tag_string_ids
+    ])
+    unused_strings = tn.strings.query('~index.isin(@used_string_ids)')
+
+    assert unused_strings.empty
+
+
+def test_auto_aliasing_input_connects_all_non_tag_nodes():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_for_auto_aliasing.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        comment_char='#',
+    )
+
+    connected_node_ids = tn.edges[
+        [c for c in tn.edges.columns if c.endswith('node_id')]
+    ]
+    connected_node_ids = pd.Series(connected_node_ids.stack().unique())
+
+    tag_node_type_id = tn.id_lookup('node_types', 'tag')
+
+    q = '({})'.format(') & ('.join([
+        '~index.isin(@connected_node_ids)',
+        'node_type_id != @tag_node_type_id'
+    ]))
+
+    unconnected_nodes = tn.nodes.query(q)
+
+    assert unconnected_nodes.empty
+
+
+def test_auto_aliasing_input_uses_all_types():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_for_auto_aliasing.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        comment_char='#',
+    )
+
+    unused_link_types = tn.link_types.query(
+        "~index.isin(@tn.assertions['link_type_id'])"
+    )
+    unused_node_types = tn.node_types.query(
+        "~index.isin(@tn.nodes['node_type_id'])"
+    )
+
+    assert unused_link_types.empty and unused_node_types.empty
+
+
+def test_shnd_with_aliases_input_uses_all_strings():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    asserted_string_ids = tn.assertions[
+        [c for c in tn.assertions.columns if c.endswith('string_id')]
+    ]
+    asserted_string_ids = pd.Series(asserted_string_ids.stack().unique())
+    assertion_tag_string_ids = pd.Series(
+        tn.assertion_tags['tag_string_id'].unique()
+    )
+    used_string_ids = pd.concat([
+        asserted_string_ids,
+        assertion_tag_string_ids
+    ])
+    unused_strings = tn.strings.query('~index.isin(@used_string_ids)')
+
+    assert unused_strings.empty
+
+
+def test_shnd_with_aliases_input_connects_all_non_tag_nodes():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    connected_node_ids = tn.edges[
+        [c for c in tn.edges.columns if c.endswith('node_id')]
+    ]
+    connected_node_ids = pd.Series(connected_node_ids.stack().unique())
+
+    tag_node_type_id = tn.id_lookup('node_types', 'tag')
+
+    q = '({})'.format(') & ('.join([
+        '~index.isin(@connected_node_ids)',
+        'node_type_id != @tag_node_type_id'
+    ]))
+
+    unconnected_nodes = tn.nodes.query(q)
+
+    assert unconnected_nodes.empty
+
+
+def test_shnd_with_aliases_input_uses_all_type():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_with_aliases.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    unused_link_types = tn.link_types.query(
+        "~index.isin(@tn.assertions['link_type_id'])"
+    )
+    unused_node_types = tn.node_types.query(
+        "~index.isin(@tn.nodes['node_type_id'])"
+    )
+
+    assert unused_link_types.empty and unused_node_types.empty
+
+
+def test_single_column_input_uses_all_strings():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_single_column(
+        'bibliograph/test_data/single_column.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        default_entry_prefix='wrk',
+        space_char='|',
+        na_string_values=['!', 'x'],
+        na_node_type='missing',
+        skiprows=0,
+        comment_char='#'
+    )
+
+    asserted_string_ids = tn.assertions[
+        [c for c in tn.assertions.columns if c.endswith('string_id')]
+    ]
+    asserted_string_ids = pd.Series(asserted_string_ids.stack().unique())
+    assertion_tag_string_ids = pd.Series(
+        tn.assertion_tags['tag_string_id'].unique()
+    )
+    used_string_ids = pd.concat([
+        asserted_string_ids,
+        assertion_tag_string_ids
+    ])
+    unused_strings = tn.strings.query('~index.isin(@used_string_ids)')
+
+    assert unused_strings.empty
+
+
+def test_single_column_input_connects_all_non_tag_nodes():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_single_column(
+        'bibliograph/test_data/single_column.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        default_entry_prefix='wrk',
+        space_char='|',
+        na_string_values=['!', 'x'],
+        na_node_type='missing',
+        skiprows=0,
+        comment_char='#'
+    )
+
+    connected_node_ids = tn.edges[
+        [c for c in tn.edges.columns if c.endswith('node_id')]
+    ]
+    connected_node_ids = pd.Series(connected_node_ids.stack().unique())
+
+    tag_node_type_id = tn.id_lookup('node_types', 'tag')
+
+    q = '({})'.format(') & ('.join([
+        '~index.isin(@connected_node_ids)',
+        'node_type_id != @tag_node_type_id'
+    ]))
+
+    unconnected_nodes = tn.nodes.query(q)
+
+    assert unconnected_nodes.empty
+
+
+def test_single_column_input_uses_all_types():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_single_column(
+        'bibliograph/test_data/single_column.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        default_entry_prefix='wrk',
+        space_char='|',
+        na_string_values=['!', 'x'],
+        na_node_type='missing',
+        skiprows=0,
+        comment_char='#'
+    )
+
+    unused_link_types = tn.link_types.query(
+        "~index.isin(@tn.assertions['link_type_id'])"
+    )
+    unused_node_types = tn.node_types.query(
+        "~index.isin(@tn.nodes['node_type_id'])"
+    )
+
+    assert unused_link_types.empty and unused_node_types.empty
