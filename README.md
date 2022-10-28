@@ -5,13 +5,7 @@
 
 `bibliograph` is a Python package that implements a unique data model designed to help researchers analyze complex source material. The database was designed for academic studies in history, where researchers are often required to manage large amounts of ambiguous, inconsistent, or potentially contradictory information from a variety of sources.
 
-I plan to make an alpha release with documentation in summer 2022.
-
-### Contents
-
-1. [Overview: picking your mess](https://github.com/shortorian/bibliograph#overview-picking-your-mess)
-2. [The data model](https://github.com/shortorian/bibliograph#the-data-model)
-3. [A philosophy of data](https://github.com/shortorian/bibliograph#a-philosophy-of-data)
+I am testing the current beta version and I will document the code when I've gotten everything running for my current use case.
 
 ### Overview: picking your mess
 
