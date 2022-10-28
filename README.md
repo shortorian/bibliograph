@@ -43,14 +43,15 @@ As show in the diagram below, the database is built around four tables: **assert
 
 The database exposes normalized relationships the user considers valid and simultaneously retains an accurate description of all source material. The **assertions** and **strings** tables represent statements in sources which could be valid or invalid and `bibliograph` helps a user interpret those statements as relationships between abstract **nodes** and **edges**.
 
-![A database diagram for the bibliograph ERD](./2022_06_14_bibliographERD.svg)
+![A database diagram for the bibliograph ERD](./bibliograph_erd.svg)
 
-Click [here](https://raw.githubusercontent.com/shortorian/bibliograph/main/2022_06_14_bibliographERD.svg) for a larger image.
+Click [here](https://raw.githubusercontent.com/shortorian/bibliograph/main/bibliograph_erd.svg) for a larger image.
 
 Two things to note about the description above:
 1. None of the example associations are hard-coded. A user can have "author" as a node type rather than a link type, the node types could be "actor" and "work", "A is author of B" could be stored twice in the **strings** table with each instance mapped to a different node, etc. The only constraint is that strings are mapped to nodes many-to-one: every row in the **strings** table points to only one node but any number of strings can refer to the same row in the **nodes** table.
 2. No database can prevent bad input (all the statements about sources here assume a user has created input data that accurately describe their sources), but `bibliograph` allows a user to search for and resolve errors in ways they couldn't if data were cleaned before entry: when an error is suspected, users can compare the abstract relationships they think are correct with "raw" input values and more easily distinguish between user error and ambiguous sources. Rows in the **assertions** and **edges** tables contain optional metadata that allows users to quickly determine how to compare their input data to external sources. See the (forthcoming) documentation for details.
 
+<!---
 ### A philosophy of data
 
 The `bibliograph` project and the companion [`shorthand`](https://github.com/shortorian/shorthand) data entry system are part of an argument that good research should be grounded in good philosophy. There is a strong philosophical argument for the approach taken here, and I hope to articulate it more clearly over time as I complete the code and use it in my research.
@@ -62,3 +63,4 @@ The bibliograph schema is built on two ontological claims about sources:
 `bibliograph` implements these claims by separating assertions made in text from things that stand in for what the text represents (the nodes). This ontology allows a user to act on corresponding epistemological propositions about text data:
 1. The map between assertions in text and abstract things the assertions refer to should change over time as new information demands changes to previously valid interpretations. `bibliograph` is structured such that these revisions can be made without losing information about sources.
 2. We can make new knowledge by analyzing what has been said separately from what was meant or what is true. `bibliograph` promotes this sort of analysis by allowing a user to query a normalized set of nodes and links and then retrieve ambiguous statements made about those abstract entities.
+--->
