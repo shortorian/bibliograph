@@ -45,8 +45,6 @@ The database exposes normalized relationships the user considers valid and simul
 
 ![A database diagram for the bibliograph ERD](./bibliograph_erd.svg)
 
-Click [here](https://raw.githubusercontent.com/shortorian/bibliograph/main/bibliograph_erd.svg) for a larger image.
-
 Two things to note about the description above:
 1. None of the example associations are hard-coded. A user can have "author" as a node type rather than a link type, the node types could be "actor" and "work", "A is author of B" could be stored twice in the **strings** table with each instance mapped to a different node, etc. The only constraint is that strings are mapped to nodes many-to-one: every row in the **strings** table points to only one node but any number of strings can refer to the same row in the **nodes** table.
 2. No database can prevent bad input (all the statements about sources here assume a user has created input data that accurately describe their sources), but `bibliograph` allows a user to search for and resolve errors in ways they couldn't if data were cleaned before entry: when an error is suspected, users can compare the abstract relationships they think are correct with "raw" input values and more easily distinguish between user error and ambiguous sources. Rows in the **assertions** and **edges** tables contain optional metadata that allows users to quickly determine how to compare their input data to external sources. See the (forthcoming) documentation for details.
