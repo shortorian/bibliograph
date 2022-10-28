@@ -232,11 +232,7 @@ def _normalize_shorthand(shnd_input, comment_char, fill_cols, drop_na):
     commented_out = has_comment.where(has_comment).ffill(axis=1).fillna(False)
     commented_out = commented_out ^ has_comment
 
-    # shnd_input = _set_StringDtype(shnd_input.mask(commented_out)))
-    # can't use pd.StringDtype() throughout because it currently doesn't
-    # allow construction with null types other than pd.NA. This will
-    # likely change soon
-    # https://github.com/pandas-dev/pandas/pull/41412
+    shnd_input = bg.util.set_string_dtype(shnd_input.mask(commented_out))
 
     # Mask off cells to the right of cells with comments in them
     shnd_input = shnd_input.mask(commented_out)
@@ -639,7 +635,8 @@ class Shorthand:
         big_id_dtype,
         small_id_dtype,
         list_position_base,
-        s_d_delimiter
+        s_d_delimiter,
+        encoding
     ):
         '''
         Takes a file-like object and parses it according to the
@@ -709,7 +706,8 @@ class Shorthand:
         data = pd.read_csv(
             filepath_or_buffer,
             skiprows=skiprows,
-            skipinitialspace=True
+            skipinitialspace=True,
+            encoding=encoding
         )
 
         # see bg.util.set_string_dtype docstring for comment on new
@@ -879,17 +877,13 @@ class Shorthand:
         dtypes = {
             'csv_row': big_id_dtype,
             'csv_col': pd.UInt8Dtype(),
-            # 'entry_prefix': pd.StringDtype(),
-            # 'item_label': pd.StringDtype(),
-            # 'string': pd.StringDtype(),
-            # 'node_type': pd.StringDtype(),
-            # 'link_type': pd.StringDtype(),
-            # 'node_tags': pd.StringDtype()
+            'entry_prefix': pd.StringDtype(),
+            'item_label': pd.StringDtype(),
+            'string': pd.StringDtype(),
+            'node_type': pd.StringDtype(),
+            'link_type': pd.StringDtype(),
+            'node_tags': pd.StringDtype()
         }
-        # can't use pd.StringDtype() throughout because it currently
-        # doesn't allow construction with null types other than pd.NA.
-        # This will likely change soon
-        # https://github.com/pandas-dev/pandas/pull/41412
 
         data = data.astype(dtypes)
         data.index = data.index.astype(big_id_dtype)
@@ -959,7 +953,8 @@ class Shorthand:
         # Split items that have list delimiters in the entry syntax
         data = data.groupby(
             by=['entry_prefix_id', 'item_label_id'],
-            dropna=False
+            dropna=False,
+            group_keys=False
         )
         data = data.apply(
             _expand_shorthand_items,
@@ -1130,6 +1125,7 @@ class Shorthand:
             'link_type_id': link_types.loc[link_types == 'entry'].index[0],
             'item_list_position': pd.NA
         })
+        entry_links = bg.util.normalize_types(entry_links, links)
         links = pd.concat([links, entry_links])
 
         # If the caller gave a link syntax, parse it
@@ -1679,6 +1675,7 @@ class Shorthand:
         small_id_dtype=pd.Int8Dtype(),
         list_position_base=1,
         s_d_delimiter='_',
+        encoding='utf8'
     ):
         ####################
         # Validate arguments
@@ -1759,7 +1756,8 @@ class Shorthand:
             big_id_dtype,
             small_id_dtype,
             list_position_base,
-            s_d_delimiter
+            s_d_delimiter,
+            encoding
         )
 
         # Read input text from temp file
@@ -1986,7 +1984,7 @@ class Shorthand:
         if entry_writer is None:
 
             if comma_separated:
-                item_separator = '", "'
+                item_separator = ', '
             elif item_separator is None:
                 raise ValueError(
                     'If comma_separated is not True, provide a '
@@ -1994,7 +1992,8 @@ class Shorthand:
                     'argument.'
                 )
 
-            entries = data.apply(
+            entries = data.fillna(na_string_values[0])
+            entries = entries.apply(
                 lambda x: item_separator.join(map(str, x)),
                 axis=1
             )
@@ -2110,15 +2109,11 @@ class Shorthand:
 
         dtypes = {
             'csv_row': big_id_dtype,
-            # 'item_label': pd.StringDtype(),
-            # 'string': pd.StringDtype(),
-            # 'node_type': pd.StringDtype(),
-            # 'link_type': pd.StringDtype()
+            'item_label': pd.StringDtype(),
+            'string': pd.StringDtype(),
+            'node_type': pd.StringDtype(),
+            'link_type': pd.StringDtype()
         }
-        # can't use pd.StringDtype() throughout because it currently
-        # doesn't allow construction with null types other than pd.NA.
-        # This will likely change soon
-        # https://github.com/pandas-dev/pandas/pull/41412
 
         data = data.astype(dtypes)
         data.index = data.index.astype(big_id_dtype)
@@ -2128,7 +2123,7 @@ class Shorthand:
         [
             'csv_row', 'item_label', 'string', 'node_type', 'link_type'
         ]
-        csv_row is integer-valued, others are 'object'
+        csv_row is integer-valued, others are pd.StringDtype
         '''
         # Map string-valued item labels to integer IDs
         item_label_id_map = _create_id_map(
@@ -2174,7 +2169,7 @@ class Shorthand:
             'node_type', 'link_type_id'
         ]
         csv_row, item_label_id, and link_type_id are integer-valued,
-        others are 'object'
+        others are pd.StringDtype
         '''
 
         # Make a map from item label IDs and list delimiters
@@ -2184,8 +2179,10 @@ class Shorthand:
         )
 
         # Split items by delimiter
-        data = data.groupby(by='item_label_id', dropna=False)
+        data = data.groupby(by='item_label_id', dropna=False, group_keys=False)
         data = data.apply(bg.entry_parsing._expand_csv_items, delimiters)
+
+        data = data.reset_index(drop=True)
 
         # Locate items that do not have a list delimiter
         item_is_delimited = data['string'].map(
@@ -2227,7 +2224,8 @@ class Shorthand:
             'csv_row', 'item_label_id', 'string', 'node_type',
             'link_type_id', 'item_list_position'
         ]
-        string and node_type are 'object' dtype, others are integer
+        string and node_type are pd.StringDtype dtype, others are
+        integer
         '''
 
         # The strings dataframe is a relation between a string value

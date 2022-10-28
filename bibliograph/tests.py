@@ -106,7 +106,7 @@ def test_manual_annotation_assertions_column_nan_states():
     assert tn.assertions['date_modified'].isna().all()
 
 
-def test_manual_annotation_num_strings_is_74():
+def test_manual_annotation_num_strings_is_75():
 
     tn = bg.slurp_shorthand(
         'bibliograph/test_data/manual_annotation.shnd',
@@ -122,7 +122,7 @@ def test_manual_annotation_num_strings_is_74():
         comment_char='#'
     )
 
-    assert len(tn.strings) == 74
+    assert len(tn.strings) == 75
 
 
 def test_manual_annotation_node_types_with_single_strings():
@@ -515,7 +515,7 @@ def test_auto_aliasing_lemonem_personso_yyy_assertions():
         comment_char='#',
     )
 
-    manual_assertion_index = [79, 81]
+    manual_assertion_index = [80, 82]
     correct_manual_aliases = pd.DataFrame(
         {
             'src_string': ['soperson', 'beth wu'],
@@ -528,7 +528,7 @@ def test_auto_aliasing_lemonem_personso_yyy_assertions():
         index=pd.Index(manual_assertion_index).astype(tn.big_id_dtype)
     )
 
-    auto_assertion_index = [92, 95, 99]
+    auto_assertion_index = [93, 96, 100]
     correct_automatic_aliases = pd.DataFrame(
         {
             'src_string': ['margaret lemone', 's. o. person', 'doi:yyy'],
@@ -909,6 +909,7 @@ def test_bibtex_input_uses_all_types():
     )
 
     assert unused_link_types.empty and unused_node_types.empty
+
 
 def test_manual_annotation_input_uses_all_strings():
 
@@ -1380,16 +1381,114 @@ def test_bibliograph_to_shorthand_conversion():
     expected_values = [
         'Newkirk,|Gordon|A._Eddy,|John|A.__1962__s_Nature__194__638_641__10.1038/194638b0',
         'Wiin-Nielsen,|A.__1962__s_Monthly|Weather|Review__90__311_323__10.1175/1520-0493(1962)090<0311:OTOKEB>2.0.CO;2',
-        'Wiin-Nielsen,|A.__1962__s_Tellus__14__280_261__10.3402/tellusa.v14i3.9551',
-        'Lally,|Vincent|E.__1962__s_Bulletin|of|the|American|Meteorological|Society__43__453_451__10.1175/1520-0477-43.9.451',
-        'Turner,|J.|S._Squires,|P.__1962__s_Tellus__14__434_422__10.3402/tellusa.v14i4.9569',
-        'London,|Julius__1962__s_Archiv|für|Meteorologie,|Geophysik|und|Bioklimatologie,|Serie|B__12__77_64__10.1007/BF02317953',
+        'Wiin-Nielsen,|A.__1962__s_Tellus__14__261_280__10.3402/tellusa.v14i3.9551',
+        'Lally,|Vincent|E.__1962__s_Bulletin|of|the|American|Meteorological|Society__43__451_453__10.1175/1520-0477-43.9.451',
+        'Squires,|P._Turner,|J.|S.__1962__s_Tellus__14__422_434__10.3402/tellusa.v14i4.9569',
+        'London,|Julius__1962__s_Archiv|für|Meteorologie,|Geophysik|und|Bioklimatologie,|Serie|B__12__64_77__10.1007/BF02317953',
         'Haurwitz,|B.__1962__s_Archiv|für|Meteorologie,|Geophysik|und|Bioklimatologie,|Serie|A__13__144_166__10.1007/BF02247180',
-        'Chapman,|S._Akasofu,|S.-I._Venkatesan,|B.__1963__s_Journal|of|Geophysical|Research__68__3345_3350__10.1029/JZ068i011p03345',
-        'Chapman,|Sydney_Akasofu,|Syun-Ichi__1963__s_Journal|of|Geophysical|Research__68__2382_2375__10.1029/JZ068i009p02375',
-        'Latham,|J._Mason,|B.|J.__1961__s_Proceedings|of|the|Royal|Society|of|London.|A.|Mathematical|and|Physical|Sciences__260__549_537__!',
-        'Smagorinsky,|Joseph__1965__s_Proceedings|of|the|{IBM}|scientific|computing|symposium|on|large-scale|problems|in|physics:|{December}|9-11,|1963__!__144_141__!'
+        'Akasofu,|S.-I._Chapman,|S._Venkatesan,|B.__1963__s_Journal|of|Geophysical|Research__68__3345_3350__10.1029/JZ068i011p03345',
+        'Akasofu,|Syun-Ichi_Chapman,|Sydney__1963__s_Journal|of|Geophysical|Research__68__2375_2382__10.1029/JZ068i009p02375',
+        'Latham,|J._Mason,|B.|J.__1961__s_Proceedings|of|the|Royal|Society|of|London.|A.|Mathematical|and|Physical|Sciences__260__537_549__!',
+        'Smagorinsky,|Joseph__1965__s_Proceedings|of|the|{IBM}|scientific|computing|symposium|on|large-scale|problems|in|physics:|{December}|9-11,|1963__!__141_144__!'
 
     ]
 
     assert (synthesized == expected_values).all()
+
+
+def test_columnar_get_nodes_having_doi_as_supertitle():
+
+    items = pd.DataFrame({
+        'author': ['smitha and jonesb', pd.NA],
+        'year': ['1979', pd.NA],
+        'journal': ['Nature', 'Nature'],
+        'volume': [100, 100],
+        'pages': [4245, 4245],
+        'doi': ['xxx', 'xxx'],
+        'bibcode': [pd.NA, 'CODE'],
+        'issue': [pd.NA, '4']
+    })
+
+    tn = bg.slurp_columnar_items(
+        items,
+        entry_syntax_fname="bibliograph/resources/default_bibtex_syntax.csv",
+        syntax_case_sensitive=False,
+        allow_redundant_items=True,
+        link_constraints_fname="bibliograph/resources/default_link_constraints.csv",
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+    )
+
+    supertitles = tn.get_nodes_by_edge_link_types(
+        has='doi',
+        representation='supertitle'
+    )
+
+    assert (supertitles == ['Nature']).all()
+
+
+def test_manual_annotation_get_nodes_equal_get_assertions():
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/manual_annotation.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_case_sensitive=False,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        skiprows=2,
+        comment_char='#',
+    )
+
+    assertion_strings = tn.get_strings_by_assertion_link_types(has='cited')
+    assertion_strings = assertion_strings.sort_values().array
+
+    node_strings = tn.get_nodes_by_edge_link_types(has='cited')
+    node_strings = node_strings.sort_values().array
+
+    assert (assertion_strings == node_strings).all()
+
+
+def test_auto_aliasing_get_nodes_equal_get_assertions():
+
+    aliases_dict = {
+        'actor': 'bibliograph/test_data/aliases_actor.csv',
+        'work': 'bibliograph/test_data/aliases_work.csv'
+    }
+
+    constraints_fname = "bibliograph/resources/default_link_constraints.csv"
+
+    tn = bg.slurp_shorthand(
+        'bibliograph/test_data/shorthand_for_auto_aliasing.shnd',
+        "bibliograph/resources/default_entry_syntax.csv",
+        "bibliograph/resources/default_link_syntax.csv",
+        syntax_case_sensitive=False,
+        aliases_dict=aliases_dict,
+        aliases_case_sensitive=False,
+        automatic_aliasing=True,
+        link_constraints_fname=constraints_fname,
+        item_separator='__',
+        space_char='|',
+        na_string_values='!',
+        na_node_type='missing',
+        default_entry_prefix='wrk',
+        comment_char='#',
+    )
+
+    assertion_strings = tn.get_strings_by_assertion_link_types(
+        src_of='volume'
+    )
+    assertion_strings = assertion_strings.sort_values().array
+
+    node_strings = tn.get_nodes_by_edge_link_types(
+        src_of='volume',
+        representation='all'
+    )
+    node_strings = node_strings.sort_values().array
+
+    assert (assertion_strings == node_strings).all()

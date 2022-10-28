@@ -154,7 +154,7 @@ def _expand_grouped_entries(
 
         # Split the prefixes off of the stacked items and expand into a
         # dataframe
-        disagged = disagged.groupby(level=3).apply(
+        disagged = disagged.groupby(level=3, group_keys=False).apply(
             _item_prefix_splitter,
             prefixed_items
         )
@@ -474,7 +474,7 @@ def parse_entries(
 
     # Concatenate the item node and link types onto the item strings.
     expanded = pd.concat([expanded.rename('string'), item_types], axis=1)
-    # expanded = _set_StringDtype(expanded)
+    expanded = bg.util.set_string_dtype(expanded)
 
     # join tag strings back onto values in the 'string' column to recover
     # the original input strings
@@ -518,10 +518,7 @@ def parse_entries(
 
     # Create a column in entries for node types
     entries['node_type'] = node_type_map[entries['entry_prefix']].array
-    # entries['node_type'] = entries['node_type'].astype(pd.StringDtype())
-    # can't use pd.StringDtype() throughout because it currently doesn't allow
-    # construction with null types other than pd.NA. This will likely change
-    # soon (https://github.com/pandas-dev/pandas/pull/41412)
+    entries['node_type'] = entries['node_type'].astype(pd.StringDtype())
 
     # Add levels to the multiindex of the input entries to conform with
     # the index of the expanded items.

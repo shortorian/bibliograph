@@ -21,8 +21,12 @@ def concat_list_item_elements(list_elements, sort=False):
     item_label = bg.util.get_single_value(list_elements, 'item_label')
 
     if sort:
+        item_elements = list_elements.copy()
+        item_elements['list_position'] = item_elements['list_position'].astype(
+            pd.Int64Dtype()
+        )
         item_string = sep.join(
-            list_elements.sort_values(by='list_position')['tgt_string']
+            item_elements.sort_values(by='list_position')['tgt_string']
         )
     else:
         item_string = sep.join(list_elements['tgt_string'])
@@ -238,6 +242,7 @@ def synthesize_entries_from_links(
     min_links = min_links.query('item_label.str.isdigit()')
     min_links = len(min_links)
     if len(group) < min_links:
+        # print('group has fewer than min_links')
         return empty
 
     # This source node might be an instance of an entry that should
@@ -277,6 +282,7 @@ def synthesize_entries_from_links(
     )
     # If any of the items isn't represented in the group, return empty.
     if not type_pair_check.all():
+        # print('group is missing an item')
         return empty
 
     # We now assume this source string is one that would have the
@@ -580,8 +586,13 @@ def synthesize_entries_by_prefix(
     # in a list of target nodes with the same link type to the same
     # source. Get the list positions for the current edge set.
     tag_selection = tn.edge_tags.merge(
+        tn.nodes['name_string_id'],
+        left_on='tag_node_id',
+        right_index=True
+    )
+    tag_selection = tag_selection.merge(
         tn.strings['string'],
-        left_on='tag_string_id',
+        left_on='name_string_id',
         right_index=True
     )
     tag_selection = tag_selection.query('string.str.isdigit()')
@@ -591,13 +602,11 @@ def synthesize_entries_by_prefix(
         edge_selection = edge_selection.merge(
             tag_selection[['edge_id', 'string']],
             left_index=True,
-            right_on='edge_id'
+            right_on='edge_id',
+            how='left'
         )
         edge_selection = edge_selection.rename(
             columns={'string': 'list_position'}
-        )
-        edge_selection.loc[:, 'list_position'] = (
-            edge_selection['list_position'].apply(int)
         )
 
     else:
@@ -607,7 +616,7 @@ def synthesize_entries_by_prefix(
     # Group the links by source string. If a source has links like
     # the entry prefix in the syntax, generate strings representing
     # items for that entry.
-    edge_selection = edge_selection.groupby(by='src_node_id')
+    edge_selection = edge_selection.groupby(by='src_node_id', group_keys=True)
 
     entry_parts = edge_selection.apply(
         synthesize_entries_from_links,
@@ -662,6 +671,13 @@ def synthesize_entries_by_syntax(
     return pd.concat(entry_parts)
 
 
+def link_ids_or_none(tn, p):
+    if p is not None:
+        return tn.id_lookup('link_types', p)
+    else:
+        return p
+
+
 class TextNet():
 
     '''def __init__(
@@ -710,16 +726,16 @@ class TextNet():
             'tgt_string_id': self.big_id_dtype,
             'ref_string_id': self.big_id_dtype,
             'link_type_id': self.small_id_dtype,
-            'date_inserted': 'object',
-            'date_modified': 'object'
+            'date_inserted': pd.StringDtype(),
+            'date_modified': pd.StringDtype()
         }
         self._assertions_index_dtype = self.big_id_dtype
 
         self._strings_dtypes = {
             'node_id': self.big_id_dtype,
-            'string': 'object',
-            'date_inserted': 'object',
-            'date_modified': 'object'
+            'string': pd.StringDtype(),
+            'date_inserted': pd.StringDtype(),
+            'date_modified': pd.StringDtype()
         }
         self._strings_index_dtype = self.big_id_dtype
 
@@ -727,8 +743,8 @@ class TextNet():
             'node_type_id': self.small_id_dtype,
             'name_string_id': self.big_id_dtype,
             'abbr_string_id': self.big_id_dtype,
-            'date_inserted': 'object',
-            'date_modified': 'object'
+            'date_inserted': pd.StringDtype(),
+            'date_modified': pd.StringDtype()
         }
         self._nodes_index_dtype = self.big_id_dtype
 
@@ -737,21 +753,21 @@ class TextNet():
             'tgt_node_id': self.big_id_dtype,
             'ref_node_id': self.big_id_dtype,
             'link_type_id': self.small_id_dtype,
-            'date_inserted': 'object',
-            'date_modified': 'object'
+            'date_inserted': pd.StringDtype(),
+            'date_modified': pd.StringDtype()
         }
         self._edges_index_dtype = self.big_id_dtype
 
         self._node_types_dtypes = {
-            'node_type': 'object',
-            'description': 'object',
+            'node_type': pd.StringDtype(),
+            'description': pd.StringDtype(),
             'null_type': bool
         }
         self._node_types_index_dtype = self.small_id_dtype
 
         self._link_types_dtypes = {
-            'link_type': 'object',
-            'description': 'object',
+            'link_type': pd.StringDtype(),
+            'description': pd.StringDtype(),
             'null_type': bool
         }
         self._link_types_index_dtype = self.small_id_dtype
@@ -764,9 +780,11 @@ class TextNet():
 
         self._edge_tags_dtypes = {
             'edge_id': self.big_id_dtype,
-            'tag_string_id': self.big_id_dtype
+            'tag_node_id': self.big_id_dtype
         }
         self._edge_tags_index_dtype = self.big_id_dtype
+
+        self._illegal_link_types = ['all', 'self']
 
     def __getattr__(self, attr):
 
@@ -864,6 +882,190 @@ class TextNet():
         table = table.fillna(pd.NA)
 
         self.__setattr__(table_name, table)
+
+    def _get_endpoints_by_link_type_ids(
+        self,
+        table_name,
+        src_of=None,
+        not_src_of=None,
+        tgt_of=None,
+        not_tgt_of=None,
+        has=None,
+        has_none=None,
+        representation='self',
+        repr_mode='abbr',
+        single_repr=True
+    ):
+
+        if repr_mode not in ['name', 'abbr']:
+            raise ValueError(
+                "repr_mode must be one of ['name', 'abbr'] not {}"
+                .format(repr_mode)
+            )
+
+        repr_not_link = representation not in self.link_types.index
+        if repr_not_link and representation not in ['self', 'all']:
+            raise ValueError(
+                "representation must be in "
+                "TextNet.link_types['link_type'] or one of "
+                "['self', 'all']. Got {}".format(representation)
+            )
+
+        def check_iterable(p):
+            if p is not None and not bg.util.iterable_not_string(p):
+                return pd.Series([p])
+            else:
+                return p
+
+        src_of = check_iterable(src_of)
+        not_src_of = check_iterable(not_src_of)
+        tgt_of = check_iterable(tgt_of)
+        not_tgt_of = check_iterable(not_tgt_of)
+        has = check_iterable(has)
+        has_none = check_iterable(has_none)
+
+        if table_name == 'assertions':
+            id_suff = '_string_id'
+        elif table_name == 'edges':
+            id_suff = '_node_id'
+
+        table = self.__getattr__(table_name)
+        src = 'src' + id_suff
+        tgt = 'tgt' + id_suff
+
+        if has_none is not None:
+
+            if src_of is not None:
+                src_of = src_of.loc[~src_of.isin(has_none)]
+            if tgt_of is not None:
+                tgt_of = tgt_of.loc[~tgt_of.isin(has_none)]
+
+            selection = table.query('~link_type_id.isin(@has_none)')
+
+        if has is not None:
+
+            if not_src_of is not None:
+                not_src_of = not_src_of.loc[~not_src_of.isin(has)]
+            if not_tgt_of is not None:
+                not_tgt_of = not_tgt_of.loc[~not_tgt_of.isin(has)]
+
+            try:
+                selection = selection.query('link_type_id.isin(@has)')
+            except NameError:
+                selection = table.query('link_type_id.isin(@has)')
+
+            endpoints = set(selection[[src, tgt]].stack())
+
+        try:
+            selection
+        except NameError:
+            selection = table
+
+        if src_of is not None:
+            s = selection.query('link_type_id.isin(@src_of)')[src]
+            try:
+                endpoints = endpoints.intersection(s)
+            except NameError:
+                endpoints = set(s)
+
+        if tgt_of is not None:
+            s = selection.query('link_type_id.isin(@tgt_of)')[tgt]
+            try:
+                endpoints = endpoints.intersection(s)
+            except NameError:
+                endpoints = set(s)
+
+        if not_src_of is not None:
+            s = selection.query('link_type_id.isin(@not_src_of)')[src]
+            try:
+                endpoints = endpoints.difference(s)
+            except NameError:
+                pass
+
+        if not_tgt_of is not None:
+            s = selection.query('link_type_id.isin(@not_tgt_of)')[tgt]
+            try:
+                endpoints = endpoints.difference(s)
+            except NameError:
+                pass
+
+        endpoints = pd.Series(list(endpoints), dtype=selection[src].dtype)
+        if endpoints.empty or representation is None:
+            return endpoints
+
+        if table_name == 'assertions':
+            return pd.Series(
+                self.strings.loc[endpoints, 'string'],
+                index=endpoints.array,
+                dtype=pd.StringDtype()
+            )
+
+        if repr_mode == 'name':
+            name_col = 'name_string_id'
+        elif repr_mode == 'abbr':
+            name_col = 'abbr_string_id'
+
+        if table_name == 'edges':
+
+            if representation == 'self':
+                strings = self.strings.loc[
+                    endpoints.map(self.nodes[name_col]),
+                    'string'
+                ]
+                return pd.Series(
+                    strings.array,
+                    index=endpoints,
+                    dtype=pd.StringDtype()
+                )
+
+            elif representation == 'all':
+                output = self.strings[['string', 'node_id']].query(
+                    'node_id.isin(@endpoints)'
+                )
+                output = pd.Series(
+                    output['string'].array,
+                    index=output['node_id'].array,
+                    dtype=pd.StringDtype()
+                )
+                return output.sort_index()
+
+            else:
+                selection = table.query('link_type_id == @representation')
+                selection = selection[[src, tgt]]
+                selection = selection.query(
+                    '{}.isin(@endpoints) | {}.isin(@endpoints)'
+                    .format(src, tgt)
+                )
+
+                loops = selection.loc[selection[src] == selection[tgt]]
+
+                selection = selection.loc[selection[src] != selection[tgt]]
+                r_selection = selection.loc[selection[tgt].isin(endpoints)]
+                r_selection = pd.DataFrame({
+                    src: r_selection[tgt],
+                    tgt: r_selection[src]
+                })
+
+                selection = pd.concat([
+                    selection.loc[selection[src].isin(endpoints)],
+                    r_selection,
+                    loops
+                ])
+                selection = selection.drop_duplicates()
+
+                if selection[src].duplicated().any() and single_repr:
+                    raise ValueError(
+                        'Found endpoints with multiple '
+                        'representations. Use single_repr=True to get '
+                        'a multiple-valued representation.'
+                    )
+
+                strings = self.strings.loc[
+                    self.nodes.loc[selection[tgt], name_col],
+                    'string'
+                ]
+
+                return pd.Series(strings.array, index=selection[src])
 
     def get_assertions_by_link_type_id(self, link_type_id, subset=None):
 
@@ -1260,6 +1462,35 @@ class TextNet():
 
         return syntaxes
 
+    def get_literal_input_parameter(self, link_type, inp_string):
+
+        if isinstance(inp_string, str):
+
+            if inp_string.isdigit:
+                inp_string_id = int(inp_string)
+            else:
+                inp_string_id = self.id_lookup('strings', inp_string)
+
+        else:
+            inp_string_id = int(inp_string)
+            inp_string = self.strings.loc[inp_string, 'string']
+
+        parameter = self.get_assertions_by_link_type(link_type)
+        parameter = parameter.query('inp_string_id == @inp_string_id')
+
+        if len(parameter['tgt_string_id']) > 1:
+            raise ValueError(
+                'multiple values for input parameter {} and input '
+                'string {}'.format(link_type, inp_string)
+            )
+
+        parameter = self.strings.loc[
+            parameter['tgt_string_id'].iloc[0],
+            'string'
+        ]
+
+        return literal_eval(parameter)
+
     def get_null_link_type_ids(self):
         return self._get_null_type_ids('link_types')
 
@@ -1283,6 +1514,130 @@ class TextNet():
         node_ids = self.strings.loc[string_ids, 'node_id']
         return self.nodes.loc[node_ids, 'node_type_id'].map(
             self.node_types['node_type']
+        )
+
+    def get_nodes_by_edge_link_type_ids(
+        self,
+        src_of=None,
+        not_src_of=None,
+        tgt_of=None,
+        not_tgt_of=None,
+        has=None,
+        has_none=None,
+        representation='self',
+        repr_mode='abbr',
+        single_repr=True
+    ):
+
+        return self._get_endpoints_by_link_type_ids(
+            table_name='edges',
+            src_of=src_of,
+            not_src_of=not_src_of,
+            tgt_of=tgt_of,
+            not_tgt_of=not_tgt_of,
+            has=has,
+            has_none=has_none,
+            representation=representation,
+            repr_mode=repr_mode,
+            single_repr=single_repr
+        )
+
+    def get_nodes_by_edge_link_types(
+        self,
+        src_of=None,
+        not_src_of=None,
+        tgt_of=None,
+        not_tgt_of=None,
+        has=None,
+        has_none=None,
+        representation='self',
+        repr_mode='abbr',
+        single_repr=True
+    ):
+
+        src_of = link_ids_or_none(self, src_of)
+        not_src_of = link_ids_or_none(self, not_src_of)
+        tgt_of = link_ids_or_none(self, tgt_of)
+        not_tgt_of = link_ids_or_none(self, not_tgt_of)
+        has = link_ids_or_none(self, has)
+        has_none = link_ids_or_none(self, has_none)
+
+        if representation not in ['self', 'all']:
+            representation = self.id_lookup('link_types', representation)
+
+        return self._get_endpoints_by_link_type_ids(
+            table_name='edges',
+            src_of=src_of,
+            not_src_of=not_src_of,
+            tgt_of=tgt_of,
+            not_tgt_of=not_tgt_of,
+            has=has,
+            has_none=has_none,
+            representation=representation,
+            repr_mode=repr_mode,
+            single_repr=single_repr
+        )
+
+    def get_strings_by_assertion_link_type_ids(
+        self,
+        src_of=None,
+        not_src_of=None,
+        tgt_of=None,
+        not_tgt_of=None,
+        has=None,
+        has_none=None,
+        representation='self',
+        repr_mode='abbr',
+        single_repr=True
+    ):
+
+        return self._get_endpoints_by_link_type_ids(
+            table_name='assertions',
+            src_of=src_of,
+            not_src_of=not_src_of,
+            tgt_of=tgt_of,
+            not_tgt_of=not_tgt_of,
+            has=has,
+            has_none=has_none,
+            representation=representation,
+            repr_mode=repr_mode,
+            single_repr=single_repr
+        )
+
+    def get_strings_by_assertion_link_types(
+        self,
+        src_of=None,
+        not_src_of=None,
+        tgt_of=None,
+        not_tgt_of=None,
+        has=None,
+        has_none=None,
+        representation='self',
+        repr_mode='abbr',
+        single_repr=True
+    ):
+
+        src_of = link_ids_or_none(self, src_of)
+        not_src_of = link_ids_or_none(self, not_src_of)
+        tgt_of = link_ids_or_none(self, tgt_of)
+        not_tgt_of = link_ids_or_none(self, not_tgt_of)
+        has = link_ids_or_none(self, has)
+        has_none = link_ids_or_none(self, has_none)
+
+        if representation not in ['self', 'all']:
+            representation = self.id_lookup('link_types', representation)
+
+        return self._get_endpoints_by_link_type_ids(
+            table_name='assertions',
+            src_of=src_of,
+            not_src_of=not_src_of,
+            tgt_of=tgt_of,
+            not_tgt_of=not_tgt_of,
+            has=has,
+            has_none=has_none,
+            representation=representation,
+            repr_mode=repr_mode,
+            single_repr=single_repr
         )
 
     def get_input_metadata_assertions_by_inp_string_id(self, inp_string_id):
@@ -1393,13 +1748,24 @@ class TextNet():
         null_type=False,
         overwrite_description=False
     ):
-        return self._insert_type(
+        output = self._insert_type(
             name,
             description,
             null_type,
             'link',
             overwrite_description
         )
+
+        illegal_types = [
+            s for s in self.link_types['link_type']
+            if s in self._illegal_link_types
+        ]
+        if len(illegal_types) > 1:
+            raise ValueError(
+                'None of {} are legal link types'.format(illegal_types)
+            )
+
+        return output
 
     def insert_node_type(
         self,
@@ -1764,6 +2130,14 @@ class TextNet():
 
     def reset_link_types_dtypes(self):
         self._reset_table_dtypes('link_types')
+        illegal_types = [
+            s for s in self.link_types['link_type']
+            if s in self._illegal_link_types
+        ]
+        if len(illegal_types) > 1:
+            raise ValueError(
+                'None of {} are legal link types'.format(illegal_types)
+            )
 
     def reset_assertion_tags_dtypes(self):
         self._reset_table_dtypes('assertion_tags')
@@ -1862,7 +2236,7 @@ class TextNet():
         self,
         string_type='name',
         include_node_types=True,
-        tags=True,
+        tags='name_string_id',
         subset=None,
         link_type=None
     ):
@@ -1935,12 +2309,17 @@ class TextNet():
                 edges['ref_node_id']
             ).array
 
-        if tags is True and not self.edge_tags.empty:
+        if tags is not None and not self.edge_tags.empty:
             # Resolve link tags as space-delimited lists
-            tags = self.edge_tags.groupby('edge_id')
+            tags = pd.DataFrame({
+                'edge_id': self.edge_tags['edge_id'].array,
+                'string_id': self.edge_tags['tag_node_id'].map(
+                    self.nodes[tags]
+                )
+            })
+            tags = tags.groupby('edge_id')
             tags = tags.apply(
-                lambda x:
-                ' '.join(self.strings.loc[x['tag_string_id'], 'string'])
+                lambda x: ' '.join(self.strings.loc[x['string_id'], 'string'])
             )
 
             resolved = pd.concat(
@@ -2505,7 +2884,6 @@ class TextNet():
             ]
             entry_strings = pd.concat(entry_parts)
 
-
         if entry_strings.empty:
             return pd.Series(dtype='object')
 
@@ -2514,4 +2892,3 @@ class TextNet():
                 entry_strings.array,
                 index=entry_strings.index.array
             )
-

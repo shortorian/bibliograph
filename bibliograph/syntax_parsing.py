@@ -228,9 +228,12 @@ def validate_entry_syntax(
             'contents of a csv file. Got {}.'.format(type(entry_syntax))
         )
 
+    entry_syntax = bg.util.set_string_dtype(entry_syntax)
+
     # pandas converts numbers to numeric types with read_csv, but
     # we're treating everything as strings, so convert values
-    entry_syntax = entry_syntax.applymap(str, na_action='ignore')
+    #entry_syntax = entry_syntax.applymap(str, na_action='ignore')
+    #print(entry_syntax.dtypes)
 
     # normalize column labels with unicode casefold (like making text
     # uniformly lower or upper case, but applies for the whole unicode
@@ -261,6 +264,8 @@ def validate_entry_syntax(
             pd.DataFrame(columns=add_cols, index=entry_syntax.index)
         ],
         axis='columns')
+
+    entry_syntax = bg.util.set_string_dtype(entry_syntax)
 
     has_prefix = ('entry_prefix' in entry_syntax.columns)
     if has_prefix and entry_syntax['entry_prefix'].notna().any():

@@ -522,7 +522,7 @@ def get_node_id_map_from_link_constraints(
 
     # Read the entry syntax into a dataframe and make a dictionary for
     # the definition of each node type mentioned in the constraints file
-    syntax_case_sensitive = tn.get_assertions_by_link_type(
+    '''syntax_case_sensitive = tn.get_assertions_by_link_type(
         'syntax_case_sensitive'
     )
     syntax_case_sensitive = syntax_case_sensitive.query(
@@ -532,11 +532,20 @@ def get_node_id_map_from_link_constraints(
         syntax_case_sensitive['tgt_string_id'].iloc[0],
         'string'
     ]
-    syntax_case_sensitive = literal_eval(syntax_case_sensitive)
+    syntax_case_sensitive = literal_eval(syntax_case_sensitive)'''
+    syntax_case_sensitive = tn.get_literal_input_parameter(
+        'syntax_case_sensitive',
+        inp_string_id
+    )
+    allow_redundant_items = tn.get_literal_input_parameter(
+        'allow_redundant_items',
+        inp_string_id
+    )
 
     entry_syntax = bg.syntax_parsing.validate_entry_syntax(
         tn.strings.loc[entry_syntax_string_id, 'string'],
-        case_sensitive=syntax_case_sensitive
+        case_sensitive=syntax_case_sensitive,
+        allow_redundant_items=allow_redundant_items
     )
     entry_syntax = {
         node_type: entry_syntax.query('entry_node_type == @node_type')
@@ -1039,7 +1048,102 @@ def complete_textnet_from_assertions(
 
     tn.reset_edges_dtypes()
 
-    tn.edge_tags = pd.DataFrame(columns=['edge_id', 'tag_string_id'])
+    # If an edge source node has links of the same type to a null node
+    # and a non-null node, the edge(s) with a null target should be
+    # dropped
+    hashed_srclnk_pairs = pd.util.hash_pandas_object(
+        tn.edges[['src_node_id', 'link_type_id']],
+        index=False
+    )
+    tn.edges['srclnk'] = hashed_srclnk_pairs.array
+    nodes_with_null_types = tn.get_nodes_with_null_types().index
+    srclnks_with_null_targets = tn.edges.loc[
+        tn.edges['tgt_node_id'].isin(nodes_with_null_types),
+        'srclnk'
+    ]
+    q = '({})'.format(') & ('.join([
+        'srclnk.isin(@srclnks_with_null_targets)',
+        '~tgt_node_id.isin(@nodes_with_null_types)'
+    ]))
+    srclnks_with_null_and_non_null_targets = tn.edges.query(q)['srclnk']
+    q = '({})'.format(') & ('.join([
+        'srclnk.isin(@srclnks_with_null_and_non_null_targets)',
+        'tgt_node_id.isin(@nodes_with_null_types)'
+    ]))
+    edges_to_drop = tn.edges.query(q)
+    tn.edges = tn.edges.drop(edges_to_drop.index).reset_index(drop=True)
+    tn.edges = tn.edges.drop('srclnk', axis='columns')
+
+    # Assertion tags that are digits should be the positions of links
+    # in listed items (as in first author, second author, etc.) so
+    # those should get copied as edge tags
+
+    tag_strings = tn.strings.loc[
+        tn.assertion_tags['tag_string_id'],
+        'string'
+    ]
+    digit_tag_strings = tag_strings.loc[tag_strings.str.isdigit()]
+    digit_tagged_assertions = tn.assertion_tags.loc[
+        tn.assertion_tags['tag_string_id'].isin(digit_tag_strings.index),
+        'assertion_id'
+    ]
+    digit_tagged_assertions = tn.assertions.loc[digit_tagged_assertions]
+
+    string_columns = ['src_string_id', 'tgt_string_id', 'ref_string_id']
+    digit_tagged_edges = digit_tagged_assertions[string_columns].apply(
+        lambda x: x.map(tn.strings['node_id'])
+    )
+    digit_tagged_edges.columns = ['src_node_id', 'tgt_node_id', 'ref_node_id']
+    link_type_ids = tn.assertions.loc[
+        digit_tagged_edges.index,
+        'link_type_id'
+    ]
+    digit_tagged_edges['link_type_id'] = link_type_ids.array
+
+    tagged_edges_hsh = pd.util.hash_pandas_object(
+        digit_tagged_edges,
+        index=False
+    )
+    edges_hsh = pd.util.hash_pandas_object(tn.edges, index=False)
+
+    hash_to_edge_id_map = edges_hsh.loc[edges_hsh.isin(tagged_edges_hsh)]
+    hash_to_edge_id_map = pd.Series(
+        tn.edges.iloc[hash_to_edge_id_map.index].index,
+        index=hash_to_edge_id_map.array
+    )
+
+    assertion_id_to_hash_map = pd.Series(
+        tagged_edges_hsh.array,
+        index=digit_tagged_edges.index
+    )
+
+    assertion_id_to_edge_id_map = assertion_id_to_hash_map.map(
+        hash_to_edge_id_map
+    )
+    tags = tn.assertion_tags.query(
+        'tag_string_id.isin(@digit_tag_strings.index)'
+    )
+    edge_ids = tags['assertion_id'].map(assertion_id_to_edge_id_map)
+    tag_node_ids = tags['tag_string_id'].map(tn.strings['node_id'])
+
+    tn.edge_tags = pd.DataFrame({
+        'edge_id': edge_ids,
+        'tag_node_id': tag_node_ids
+    })
+
+    tn.reset_edge_tags_dtypes()
+
+    date_inserted = time_string()
+
+    for attr in ['assertions', 'strings', 'nodes', 'edges']:
+        table = tn.__getattr__(attr)
+        table['date_inserted'] = date_inserted
+        table['date_modified'] = pd.NA
+
+    tn.reset_assertions_dtypes()
+    tn.reset_strings_dtypes()
+    tn.reset_nodes_dtypes()
+    tn.reset_edges_dtypes()
 
     return tn
 
@@ -1220,18 +1324,6 @@ def textnet_from_parsed_shorthand(
         links_excluded_from_edges=links_excluded_from_edges
     )
 
-    date_inserted = time_string()
-
-    for attr in ['assertions', 'strings', 'nodes', 'edges']:
-        table = tn.__getattr__(attr)
-        table['date_inserted'] = date_inserted
-        table['date_modified'] = pd.NA
-
-    tn.reset_assertions_dtypes()
-    tn.reset_strings_dtypes()
-    tn.reset_nodes_dtypes()
-    tn.reset_edges_dtypes()
-
     return tn
 
 
@@ -1245,6 +1337,7 @@ def slurp_bibtex(
     automatic_aliasing=False,
     link_constraints_fname=None,
     links_excluded_from_edges=None,
+    encoding='utf8',
     **kwargs
 ):
 
@@ -1297,7 +1390,7 @@ def slurp_bibtex(
     kwargs = {k: v for k, v in kwargs.items() if k != 'entry_writer'}
 
     # parse input
-    with open(bibtex_fname, encoding='utf8') as f:
+    with open(bibtex_fname, encoding=encoding) as f:
         parsed = s.parse_items(
             pd.DataFrame(bibtex_parser.parse_file(f).entries),
             entry_writer=entry_writer,
@@ -1309,6 +1402,97 @@ def slurp_bibtex(
     textnet_build_parameters = kwargs
     textnet_build_parameters['syntax_case_sensitive'] = syntax_case_sensitive
     textnet_build_parameters['allow_redundant_items'] = allow_redundant_items
+
+    tn = textnet_from_parsed_shorthand(
+        parsed,
+        inp_string,
+        aliases_dict,
+        aliases_case_sensitive,
+        automatic_aliasing,
+        link_constraints_fname,
+        links_excluded_from_edges,
+        textnet_build_parameters
+    )
+
+    return tn
+
+
+def slurp_columnar_items(
+    data,
+    entry_syntax_fname,
+    syntax_case_sensitive=True,
+    allow_redundant_items=False,
+    aliases_dict=None,
+    aliases_case_sensitive=True,
+    automatic_aliasing=False,
+    link_constraints_fname=None,
+    links_excluded_from_edges=None,
+    skiprows=0,
+    encoding='utf8',
+    **kwargs
+):
+
+    # read in data
+    if isinstance(data, str):
+        data = pd.read_csv(
+            data,
+            skiprows=skiprows,
+            skipinitialspace=True,
+            encoding=encoding
+        )
+        add_read_csv_params = True
+    else:
+        data = pd.DataFrame(data)
+        add_read_csv_params = False
+
+    data = data.applymap(lambda x: pd.NA if pd.isna(x) else str(x))
+
+    # make a shorthand
+    s = bg.Shorthand(
+        entry_syntax=entry_syntax_fname,
+        syntax_case_sensitive=syntax_case_sensitive,
+        allow_redundant_items=allow_redundant_items
+    )
+
+    # make a string value representing the current function call
+    frame = inspect.currentframe()
+    current_module = inspect.getframeinfo(frame).filename
+    current_module = Path(current_module).stem.split('.')[0]
+    current_function = inspect.getframeinfo(frame).function
+    current_function = '.'.join(
+        ['bibliograph', current_module, current_function]
+    )
+
+    excluded_locals = [
+        'frame',
+        'current_module',
+        'current_function',
+        'excluded_locals',
+        'kwargs'
+    ]
+    args = {k: v for k, v in locals().items() if k not in excluded_locals}
+    args.update(kwargs)
+
+    inp_string = '{}(**{})'.format(current_function, args)
+
+    # parse the data, gather textnet build parameters, return a textnet
+    parsed = s.parse_items(
+        data,
+        input_string=inp_string,
+        input_node_type='_python_function_call',
+        **kwargs
+        )
+
+    textnet_build_parameters = kwargs
+    textnet_build_parameters.update({
+        'syntax_case_sensitive': syntax_case_sensitive,
+        'allow_redundant_items': allow_redundant_items
+    })
+    if add_read_csv_params:
+        textnet_build_parameters.update({
+            'skiprows': skiprows,
+            'encoding': encoding
+        })
 
     tn = textnet_from_parsed_shorthand(
         parsed,
@@ -1341,7 +1525,8 @@ def slurp_shorthand(
     na_string_values='!',
     na_node_type='missing',
     default_entry_prefix='wrk',
-    comment_char='#'
+    comment_char='#',
+    encoding='utf8'
 ):
 
     # make a string value representing the current function call
@@ -1378,7 +1563,8 @@ def slurp_shorthand(
         'na_node_type': na_node_type,
         'default_entry_prefix': default_entry_prefix,
         'comment_char': comment_char,
-        'skiprows': skiprows
+        'skiprows': skiprows,
+        'encoding': encoding
     }
 
     parsed = s.parse_text(
@@ -1421,7 +1607,8 @@ def slurp_single_column(
     na_string_values='!',
     na_node_type='missing',
     default_entry_prefix='wrk',
-    comment_char='#'
+    comment_char='#',
+    encoding='utf8'
 ):
 
     # make a string value representing the current function call
@@ -1457,7 +1644,8 @@ def slurp_single_column(
         'na_node_type': na_node_type,
         'default_entry_prefix': default_entry_prefix,
         'comment_char': comment_char,
-        'skiprows': skiprows
+        'skiprows': skiprows,
+        'encoding': encoding
     }
 
     parsed = s.parse_text(

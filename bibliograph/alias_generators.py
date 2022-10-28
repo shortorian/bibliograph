@@ -290,7 +290,7 @@ def doi_alias_generator(doi_series, delimiters=['doi:', 'doi.org/', 'doi/']):
                 'delimiter': delimiter
             })
 
-    output = output.groupby(by='delimiter', dropna=False)
+    output = output.groupby(by='delimiter', dropna=False, group_keys=False)
     output = output.apply(delimiter_splitter)
 
     return output['string'].rename(None)

@@ -497,7 +497,7 @@ def normalize_types(to_norm, template, strict=True, continue_idx=True):
         template_idx_is_sequential = pd.Series(template.index).diff().iloc[1:]
         template_idx_is_sequential = (template_idx_is_sequential == 1).all()
 
-        if template_idx_is_sequential & template.index.is_monotonic:
+        if template_idx_is_sequential & template.index.is_monotonic_increasing:
             new_index_min = template.index.max() + 1
             index = pd.RangeIndex(new_index_min, new_index_min + len(new_df))
         else:
@@ -775,20 +775,10 @@ def non_intersecting_sequence(
 
 
 def set_string_dtype(df):
-    '''
-    can't use pd.StringDtype() throughout because it currently doesn't
-    allow construction with null types other than pd.NA. This will
-    likely change soon
-    https://github.com/pandas-dev/pandas/pull/41412
-    '''
     df_cols = df.columns
-    return df.astype(
-        dict(
-            zip(
-                df_cols, [pd.StringDtype()]*len(df_cols)
-            )
-        )
-    )
+    return df.astype(dict(zip(
+        df_cols, [pd.StringDtype()]*len(df_cols)
+    )))
 
 
 def map_indexes(candidate_values, new_values, existing_values):
