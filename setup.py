@@ -5,7 +5,7 @@ with open('README.md', 'r') as readme:
 
 setuptools.setup(
     name='bibliograph',
-    version='0.1.1',
+    version='0.1.2',
     author='Devin Short',
     author_email='short.devin@gmail.com',
     packages=['bibliograph'],
