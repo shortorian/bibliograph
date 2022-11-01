@@ -1,5 +1,6 @@
 import bibliograph as bg
 import pandas as pd
+import tempfile
 from pathlib import Path
 
 
@@ -1686,15 +1687,13 @@ class Shorthand:
         # a buffer then it will be empty after it's passed to
         # pandas.read_csv, so we write it to a temp file.
         if 'read' in dir(filepath_or_buffer):
-            if not Path.is_file(Path('temp.shorthand')):
-                with open('temp.shorthand', 'w') as f:
-                    f.write(filepath_or_buffer.read())
 
-            filepath_or_buffer = 'temp.shorthand'
+            tempfile_path = tempfile.mkstemp(text=True)[1]
 
-        # Hash the input text so we can validate it when we read it back
-        with open(filepath_or_buffer, 'r') as f:
-            input_hash = hash(f.read())
+            with open(tempfile_path, 'w') as f:
+                f.write(filepath_or_buffer.read())
+
+            filepath_or_buffer = tempfile_path
 
         if space_char is not None:
             space_char = str(space_char)
@@ -1760,15 +1759,13 @@ class Shorthand:
             encoding
         )
 
-        # Read input text from temp file
-        with open(filepath_or_buffer, 'r') as f:
-            full_text_string = f.read()
-
-        if hash(full_text_string) != input_hash:
-            raise RuntimeError('input text was modified during parsing')
-
-        # Delete the temp file if it exists
-        Path.unlink(Path('temp.shorthand'), missing_ok=True)
+        # Read input text
+        try:
+            with open(tempfile_path, 'r') as f:
+                full_text_string = f.read()
+        except NameError:
+            with open(filepath_or_buffer, 'r') as f:
+                full_text_string = f.read()
 
         '''
         SWITCHING TO LITERAL NODE TYPE
