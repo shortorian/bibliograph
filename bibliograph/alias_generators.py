@@ -1,4 +1,6 @@
+import bibliograph as bg
 import pandas as pd
+from warnings import warn
 
 
 def western_surname_alias_generator_serial(
@@ -77,28 +79,51 @@ def western_surname_alias_generator_vector(
     drop_nouns=['ms', 'mrs', 'mr', 'dr', 'sir', 'dame'],
     generationals=['jr', 'sr'],
     partial_surnames=['st', 'de', 'le', 'van', 'von'],
-    exclusions=None
+    exclusions=[
+        'administration',
+        'university',
+        'national',
+        'institute',
+        'center'
+    ],
+    generationals_as_surnames=False
 ):
 
-    if exclusions is None:
-        exclusions = [
-            'administration',
-            'university',
-            'national',
-            'institute',
-            'center'
-        ]
+    if drop_nouns is not None:
+        drop_nouns = pd.Series(drop_nouns)
+        drop_nouns = pd.concat([drop_nouns, drop_nouns.map(lambda x: x + '.')])
+    else:
+        drop_nouns = pd.Series([], dtype='object')
 
-    drop_nouns = pd.Series(drop_nouns)
-    drop_nouns = pd.concat([drop_nouns, drop_nouns.map(lambda x: x + '.')])
+    if generationals is not None:
+        generationals = pd.Series(generationals)
+        generationals = pd.concat([
+            generationals,
+            generationals.map(lambda x: x + '.')
+        ])
+    else:
+        generationals = pd.Series([], dtype='object')
 
-    generationals = pd.Series(generationals)
-    generationals = pd.concat([
-        generationals,
-        generationals.map(lambda x: x + '.')
-    ])
+    if partial_surnames is not None:
 
-    partial_surnames = partial_surnames + [p + '.' for p in partial_surnames]
+        if not bg.util.iterable_not_string(partial_surnames):
+            partial_surnames = [partial_surnames]
+
+        if generationals_as_surnames:
+            partial_surnames = list(partial_surnames) + list(generationals)
+            generationals = pd.Series([], dtype='object')
+
+        partial_surnames = (
+            partial_surnames + [p + '.' for p in partial_surnames]
+        )
+
+    else:
+        partial_surnames = pd.Series([], dtype='object')
+
+    if exclusions is not None:
+        exclusions = pd.Series(exclusions)
+    else:
+        exclusions = pd.Series([], dtype='object')
 
     concat_words_regex = r'[^\w]|[\d_]'
     first_letters_regex = r'(?!\b)\w*|\W*?'
@@ -128,8 +153,6 @@ def western_surname_alias_generator_vector(
         else:
             more_fields = pd.Series(False, index=split_names[0].index)
 
-        split_names = split_names[[0, 1]]
-
         is_drop_noun = split_names[1].isin(drop_nouns)
 
         if is_drop_noun.any():
@@ -146,18 +169,43 @@ def western_surname_alias_generator_vector(
 
         if is_generational.any():
 
-            gens = split_names[1].loc[is_generational & ~more_fields]
+            gens_w_separate_surnames = is_generational & more_fields
 
-            selection = split_names.loc[is_generational & ~more_fields, 0]
-            selection = selection.str.rsplit(' ', n=1, expand=True)
-            slctn_idx = selection.index
+            if gens_w_separate_surnames.any():
 
-            split_names.loc[slctn_idx, 0] = selection[1]
-            split_names.loc[slctn_idx, 1] = selection[0]
-            given_names = split_names.loc[slctn_idx, 1]
-            split_names.loc[slctn_idx, 1] = given_names + ' ' + gens
+                split_names.loc[gens_w_separate_surnames, 0] = (
+                    split_names.loc[gens_w_separate_surnames, 0] +
+                    split_names.loc[gens_w_separate_surnames, 1]
+                )
 
-            split_names.loc[is_generational & more_fields, 1] = pd.NA
+                split_names.loc[gens_w_separate_surnames, 1] = (
+                    split_names.loc[gens_w_separate_surnames, 2]
+                )
+
+            gens_wout_separate_surnames = is_generational & ~more_fields
+
+            if gens_wout_separate_surnames.any():
+
+                gens = split_names[1].loc[gens_wout_separate_surnames]
+
+                selection = split_names.loc[gens_wout_separate_surnames, 0]
+                selection = selection.str.rsplit(' ', n=1, expand=True)
+                slctn_idx = selection.index
+
+                split_names.loc[slctn_idx, 0] = selection[1]
+                split_names.loc[slctn_idx, 1] = selection[0]
+                surnames = split_names.loc[slctn_idx, 0]
+                split_names.loc[slctn_idx, 0] = surnames + ' ' + gens
+
+        given_parts = split_names[1].str.rsplit(' ', n=1, expand=True)
+        given_ends_in_generational = given_parts[1].isin(generationals)
+        if given_ends_in_generational.any():
+            given_parts = given_parts.loc[given_ends_in_generational]
+            split_names.loc[given_parts.index, 0] = (
+                split_names.loc[given_parts.index, 0] + given_parts[1]
+            )
+            split_names.loc[given_parts.index, 1] = given_parts[0]
+
 
         for m in drop_nouns:
             split_names = split_names.apply(lambda x: x.str.removeprefix(m))
