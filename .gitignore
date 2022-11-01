@@ -132,5 +132,4 @@ dmypy.json
 notes/
 archive/
 .vscode/
-bibliograph-0.0.0/
-bibliograph-0.0.1/
+bibliograph-0.*/
