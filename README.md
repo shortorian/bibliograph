@@ -7,6 +7,8 @@
 
 I am testing the beta and I will document the code when I've gotten everything running for my current use case.
 
+The [bibliograph data model](https://shortorian.github.io/bibliograph-data-model/) by Devin Short is licensed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
 ### Overview: picking your mess
 
 "Data cleaning" typically destroys information: data are restructured such that references are uniform, duplicates are eliminated, and the database contains a "correct" representation of input data. In that process, a database is irreversibly separated from whatever sources generated the input data. The standard assumption is that inconsistencies in data are either entry errors or useless variations on a standard value. However, those variations between statements about the same things are exactly the kind of data historians and other researchers in the humanities would like to study. `bibliograph` retains the variations alongside normalized, queryable tables so users can access both the "clean" relationships they interpret from source material and the "messy" relationships in their sources.
