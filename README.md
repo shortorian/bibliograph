@@ -5,7 +5,9 @@
 
 `bibliograph` is a Python package that implements a unique data model designed to help researchers analyze complex source material. The database was designed for academic studies in history, where researchers are often required to manage large amounts of ambiguous, inconsistent, or potentially contradictory information from a variety of sources.
 
-I am testing the beta and I will document the code when I've gotten everything running for my current use case.
+I am testing the beta and I will document the code when I've gotten everything running for my current use case. `bibliograph` is [currently listed](https://pypi.org/project/bibliograph/) on the Python Package Index and you can install it with `pip install bibliograph`. If you're interested in using the database or getting updates on development, please let me know.
+
+The [bibliograph data model](https://shortorian.github.io/bibliograph-data-model/) by Devin Short is licensed under [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ### Overview: picking your mess
 
