@@ -1,7 +1,7 @@
 # bibliograph
 ![pytest](https://github.com/shortorian/shorthand/actions/workflows/ci.yml/badge.svg)
 
-### A database system for research in the humanities.
+### A database system for primary source research.
 
 `bibliograph` is a Python package that implements a unique data model designed to help researchers analyze complex source material. The database was designed for academic studies in history, where researchers are often required to manage large amounts of ambiguous, inconsistent, or potentially contradictory information from a variety of sources.
 
