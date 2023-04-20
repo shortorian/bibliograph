@@ -1,5 +1,6 @@
 # bibliograph
-![pytest](https://github.com/shortorian/shorthand/actions/workflows/ci.yml/badge.svg)
+[comment]: # (![pytest](https://github.com/shortorian/shorthand/actions/workflows/ci.yml/badge.svg))
+
 
 ### A database system for primary source research.
 
